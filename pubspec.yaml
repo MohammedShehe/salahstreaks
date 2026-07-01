@@ -1,0 +1,36 @@
+name: salahstreaks
+description: An Islamic Game mobile app for tracking daily ibadat with streaks
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  shared_preferences: ^2.2.2
+  intl: ^0.18.1
+  fl_chart: ^0.66.0
+  google_fonts: ^6.1.0
+  provider: ^6.0.5
+  flutter_svg: ^2.0.9
+  shimmer: ^3.0.0
+  table_calendar: ^3.0.9
+  animations: ^2.0.11
+  smooth_page_indicator: ^1.1.0
+  flutter_animate: ^4.2.0+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/quran/
