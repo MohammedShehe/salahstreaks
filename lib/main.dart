@@ -5,8 +5,16 @@ import 'package:salahstreaks/screens/home_screen.dart';
 import 'package:salahstreaks/screens/graphs_screen.dart';
 import 'package:salahstreaks/screens/history_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:salahstreaks/services/reminder_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize reminder service and schedule all reminders
+  final reminderService = ReminderService();
+  await reminderService.initialize();
+  await reminderService.scheduleAllReminders();
+  
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppProvider(),

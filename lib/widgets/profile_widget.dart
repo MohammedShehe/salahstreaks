@@ -22,96 +22,112 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       children: [
         GestureDetector(
           onTap: () => setState(() => _showProfile = true),
-          child: Row(
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.green[700]!,
-                      Colors.green[900]!,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.green[900]!.withOpacity(0.3),
+                  Colors.green[800]!.withOpacity(0.1),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.green[700]!.withOpacity(0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.green[700]!,
+                        Colors.green[900]!,
+                      ],
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.green[400]!,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green[700]!.withOpacity(0.3),
+                        blurRadius: 10,
+                      ),
                     ],
                   ),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.green[400]!,
-                    width: 2,
+                  child: const Icon(
+                    Icons.person,
+                    color: Colors.white,
+                    size: 30,
                   ),
-                  boxShadow: [
-                    BoxShadow(
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'MO11',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.star,
+                            color: Colors.amber,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${totalPoints.round()} pts',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[400],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.green[800]!.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
                       color: Colors.green[700]!.withOpacity(0.3),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'MO11',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
                     ),
                   ),
-                  Row(
+                  child: Row(
                     children: [
                       const Icon(
-                        Icons.star,
-                        color: Colors.amber,
-                        size: 14,
+                        Icons.local_fire_department,
+                        color: Colors.orange,
+                        size: 16,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '${totalPoints.round()} pts',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[400],
+                        '${provider.userData?['streaks'] ?? 0}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.green[800]!.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.green[700]!.withOpacity(0.3),
-                  ),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.local_fire_department,
-                      color: Colors.orange,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${provider.userData?['streaks'] ?? 0}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         if (_showProfile)

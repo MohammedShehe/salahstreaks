@@ -7,6 +7,7 @@ import 'package:salahstreaks/widgets/logging_widgets.dart';
 import 'package:salahstreaks/utils/constants.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter/services.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,11 +19,25 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _currentVerse = '';
   String _currentTranslation = '';
+  bool _copied = false;
 
   @override
   void initState() {
     super.initState();
     _loadDailyVerse();
+    
+    // Update time every second
+    _startTimer();
+  }
+
+  void _startTimer() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted) {
+        setState(() {});
+      }
+      return mounted;
+    });
   }
 
   void _loadDailyVerse() {
@@ -32,6 +47,28 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _currentVerse = quranVerses[index]['verse']!;
       _currentTranslation = quranVerses[index]['translation']!;
+    });
+  }
+
+  void _copyVerse() {
+    final text = '$_currentVerse\n\n$_currentTranslation';
+    Clipboard.setData(ClipboardData(text: text));
+    setState(() {
+      _copied = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('📋 Verse copied to clipboard!'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _copied = false;
+        });
+      }
     });
   }
 
@@ -68,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 
                 const SizedBox(height: 20),
                 
-                // Date and Time
+                // Date and Time - UPDATED to update every second
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
@@ -125,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 
                 const SizedBox(height: 20),
                 
-                // Quran Verse
+                // Quran Verse - UPDATED with working copy
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -150,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
+                      SelectableText(
                         _currentVerse,
                         style: const TextStyle(
                           fontSize: 20,
@@ -171,31 +208,31 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 10),
                       InkWell(
-                        onTap: () {
-                          // Copy verse
-                        },
+                        onTap: _copyVerse,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.green[800]!.withOpacity(0.3),
+                            color: _copied 
+                                ? Colors.green[600]!.withOpacity(0.5)
+                                : Colors.green[800]!.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                Icons.copy,
-                                color: Colors.green[400],
+                                _copied ? Icons.check : Icons.copy,
+                                color: _copied ? Colors.green[300] : Colors.green[400],
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                'Copy',
+                                _copied ? 'Copied!' : 'Copy',
                                 style: TextStyle(
-                                  color: Colors.green[400],
+                                  color: _copied ? Colors.green[300] : Colors.green[400],
                                   fontSize: 12,
                                 ),
                               ),
