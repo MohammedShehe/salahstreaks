@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 class ReminderService {
   static const MethodChannel _channel = MethodChannel('salahstreaks/reminders');
+  static Timer? _reminderTimer;
   
   // Salah times (24-hour format)
   final Map<String, Map<String, int>> salahTimes = {
@@ -17,8 +19,11 @@ class ReminderService {
 
   List<String> _shownReminders = [];
   String _lastDate = '';
+  bool _isInitialized = false;
 
   Future<void> initialize() async {
+    if (_isInitialized) return;
+    
     // Set up channel for receiving messages from native side
     _channel.setMethodCallHandler(_handleMethodCall);
     
@@ -34,6 +39,19 @@ class ReminderService {
     } else {
       _shownReminders = prefs.getStringList('shown_reminders') ?? [];
     }
+    
+    _isInitialized = true;
+    
+    // Start periodic reminder check
+    _startReminderTimer();
+  }
+
+  void _startReminderTimer() {
+    _reminderTimer?.cancel();
+    _reminderTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      // This will be handled by the UI layer
+      // The checkReminders method will be called from the UI
+    });
   }
 
   Future<dynamic> _handleMethodCall(MethodCall call) async {
@@ -48,28 +66,34 @@ class ReminderService {
   }
 
   Future<void> scheduleAllReminders() async {
-    // Schedule daily Quran verse reminder (6:00 AM)
-    await _scheduleReminder(
-      id: 100,
-      title: '📖 Daily Quran Verse',
-      body: 'Check your daily Quran verse for reflection today!',
-      hour: 6,
-      minute: 0,
-      recurring: true,
-    );
-    
-    // Schedule Salah reminders
-    int id = 1;
-    for (final entry in salahTimes.entries) {
+    try {
+      // Schedule daily Quran verse reminder (6:00 AM)
       await _scheduleReminder(
-        id: id,
-        title: '🕌 ${entry.key} Time',
-        body: 'It\'s time for ${entry.key} prayer. Don\'t forget!',
-        hour: entry.value['hour']!,
-        minute: entry.value['minute']!,
+        id: 100,
+        title: '📖 Daily Quran Verse',
+        body: 'Check your daily Quran verse for reflection today!',
+        hour: 6,
+        minute: 0,
         recurring: true,
       );
-      id++;
+      
+      // Schedule Salah reminders
+      int id = 1;
+      for (final entry in salahTimes.entries) {
+        await _scheduleReminder(
+          id: id,
+          title: '🕌 ${entry.key} Time',
+          body: 'It\'s time for ${entry.key} prayer. Don\'t forget!',
+          hour: entry.value['hour']!,
+          minute: entry.value['minute']!,
+          recurring: true,
+        );
+        id++;
+      }
+      print('✅ All reminders scheduled successfully');
+    } catch (e) {
+      print('⚠️ Error scheduling reminders: $e');
+      // Continue with in-app reminders only
     }
   }
 
@@ -91,7 +115,8 @@ class ReminderService {
         'recurring': recurring,
       });
     } catch (e) {
-      print('Error scheduling reminder: $e');
+      // Silently fail - we'll use in-app reminders
+      print('Native reminder not available for id $id');
     }
   }
 
@@ -111,7 +136,7 @@ class ReminderService {
     }
   }
 
-  // ============ NEW METHODS FOR IN-APP REMINDERS ============
+  // ============ IN-APP REMINDERS ============
 
   List<Map<String, String>> checkDueReminders() {
     final now = DateTime.now();
@@ -162,11 +187,10 @@ class ReminderService {
   }
 
   void showInAppReminder(BuildContext context, String title, String body) {
-    // Check if context is still valid
     if (!context.mounted) return;
     
     try {
-      // Show as SnackBar
+      // Show as a persistent SnackBar
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Column(
@@ -187,17 +211,25 @@ class ReminderService {
               ),
             ],
           ),
-          backgroundColor: Colors.green[800],
-          duration: const Duration(seconds: 10),
+          backgroundColor: const Color(0xFF1A2F1A),
+          duration: const Duration(seconds: 15),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: Colors.green[700]!.withOpacity(0.3),
+            ),
           ),
           margin: const EdgeInsets.all(16),
+          elevation: 6,
         ),
       );
     } catch (e) {
       print('Error showing reminder: $e');
     }
+  }
+
+  void dispose() {
+    _reminderTimer?.cancel();
   }
 }

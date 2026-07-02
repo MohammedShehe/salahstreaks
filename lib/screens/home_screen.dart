@@ -4,6 +4,7 @@ import 'package:salahstreaks/providers/app_provider.dart';
 import 'package:salahstreaks/widgets/profile_widget.dart';
 import 'package:salahstreaks/widgets/streaks_widget.dart';
 import 'package:salahstreaks/widgets/logging_widgets.dart';
+import 'package:salahstreaks/widgets/events_slider.dart';
 import 'package:salahstreaks/utils/constants.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -25,8 +26,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadDailyVerse();
-    
-    // Update time every second
     _startTimer();
   }
 
@@ -78,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final dateFormat = DateFormat('EEEE, d MMMM yyyy');
     final timeFormat = DateFormat('hh:mm:ss a');
+    final salahCount = provider.getTodaySalahCount();
 
     return Scaffold(
       body: Container(
@@ -105,7 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 
                 const SizedBox(height: 20),
                 
-                // Date and Time - UPDATED to update every second
+                // Date and Time
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
@@ -162,7 +162,75 @@ class _HomeScreenState extends State<HomeScreen> {
                 
                 const SizedBox(height: 20),
                 
-                // Quran Verse - UPDATED with working copy
+                // Salah Progress Bar
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.green[900]!.withOpacity(0.3),
+                        Colors.green[800]!.withOpacity(0.1),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.green[700]!.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '🕌 Today\'s Salah',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '$salahCount/5',
+                            style: TextStyle(
+                              color: Colors.green[300],
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: salahCount / 5,
+                          minHeight: 8,
+                          backgroundColor: Colors.grey[800],
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            salahCount >= 5 ? Colors.green : Colors.amber,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildPrayerStatus('Fajr', salahCount >= 1),
+                          _buildPrayerStatus('Dhuhr', salahCount >= 2),
+                          _buildPrayerStatus('Asr', salahCount >= 3),
+                          _buildPrayerStatus('Maghrib', salahCount >= 4),
+                          _buildPrayerStatus('Isha', salahCount >= 5),
+                        ],
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 300.ms),
+                
+                const SizedBox(height: 20),
+                
+                // Quran Verse
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -246,6 +314,27 @@ class _HomeScreenState extends State<HomeScreen> {
                 
                 const SizedBox(height: 20),
                 
+                // 📅 Islamic Events Slider
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '📅 Upcoming Islamic Events',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    EventsSlider(),
+                  ],
+                ).animate().fadeIn(delay: 500.ms),
+                
+                const SizedBox(height: 12),
+                
                 // Streaks
                 StreaksWidget(
                   streaks: provider.streaks,
@@ -300,10 +389,20 @@ class _HomeScreenState extends State<HomeScreen> {
                             'Quran': Icons.menu_book_rounded,
                             'Sadaqat': Icons.favorite_rounded,
                           };
+                          // For Salah, check if all 5 are done
+                          bool isLogged = false;
+                          if (type == 'Salah') {
+                            isLogged = provider.getTodaySalahCount() >= 5;
+                          } else {
+                            isLogged = provider.isLoggedToday(type);
+                          }
+                          
                           return ElevatedButton.icon(
                             onPressed: () => _showLoggingDialog(context, type),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green[800],
+                              backgroundColor: isLogged 
+                                  ? Colors.grey[700] 
+                                  : Colors.green[800],
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 12,
@@ -312,10 +411,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            icon: Icon(icons[type], color: Colors.white),
+                            icon: Icon(
+                              icons[type], 
+                              color: isLogged ? Colors.grey[400] : Colors.white,
+                            ),
                             label: Text(
-                              type,
-                              style: const TextStyle(color: Colors.white),
+                              isLogged 
+                                  ? (type == 'Salah' ? '✅ All Prayers' : '✅ $type')
+                                  : type,
+                              style: TextStyle(
+                                color: isLogged ? Colors.grey[400] : Colors.white,
+                              ),
                             ),
                           );
                         }).toList(),
@@ -328,6 +434,41 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPrayerStatus(String name, bool isDone) {
+    return Column(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isDone ? Colors.green[700] : Colors.grey[800],
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isDone ? Colors.green.shade400 : Colors.grey.shade600,
+              width: 1.5,
+            ),
+          ),
+          child: Center(
+            child: Icon(
+              isDone ? Icons.check : Icons.access_time,
+              color: isDone ? Colors.white : Colors.grey[500],
+              size: 14,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          name,
+          style: TextStyle(
+            color: isDone ? Colors.white : Colors.grey[500],
+            fontSize: 10,
+            fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
     );
   }
 

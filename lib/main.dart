@@ -13,11 +13,13 @@ void main() async {
   // Initialize reminder service
   final reminderService = ReminderService();
   await reminderService.initialize();
-  // Try to schedule native reminders, but don't fail if not available
+  
+  // Try to schedule native reminders (will silently fail if not available)
   try {
     await reminderService.scheduleAllReminders();
   } catch (e) {
-    print('Native reminders not available, using in-app only');
+    // Native reminders not available, using in-app only
+    print('Using in-app reminders only');
   }
   
   runApp(
@@ -83,9 +85,18 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _pageController = PageController(initialPage: 0);
     WidgetsBinding.instance.addObserver(this);
     
-    // Check reminders after 2 seconds
+    // Check reminders after 2 seconds and then every minute
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) _checkReminders();
+    });
+    
+    // Periodic reminder check every minute
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(minutes: 1));
+      if (mounted) {
+        _checkReminders();
+      }
+      return mounted;
     });
   }
 
@@ -104,14 +115,22 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   void _checkReminders() {
-    final dueReminders = widget.reminderService.checkDueReminders();
-    for (final reminder in dueReminders) {
-      widget.reminderService.markReminderShown(reminder['key']!);
-      widget.reminderService.showInAppReminder(
-        context,
-        reminder['title']!,
-        reminder['body']!,
-      );
+    if (!mounted) return;
+    
+    try {
+      final dueReminders = widget.reminderService.checkDueReminders();
+      for (final reminder in dueReminders) {
+        if (mounted) {
+          widget.reminderService.markReminderShown(reminder['key']!);
+          widget.reminderService.showInAppReminder(
+            context,
+            reminder['title']!,
+            reminder['body']!,
+          );
+        }
+      }
+    } catch (e) {
+      // Silent fail
     }
   }
 

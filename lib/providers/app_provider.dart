@@ -29,12 +29,110 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ✅ ADD THIS METHOD - Check if any ibadat type is already logged today
+  bool isLoggedToday(String type) {
+    final today = DateTime.now();
+    return _logs.any((log) => 
+      log.type == type &&
+      log.date.year == today.year &&
+      log.date.month == today.month &&
+      log.date.day == today.day
+    );
+  }
+
+  // Get today's Salah log if exists
+  IbadatLog? getTodaySalahLog() {
+    final today = DateTime.now();
+    try {
+      return _logs.firstWhere((log) => 
+        log.type == 'Salah' &&
+        log.date.year == today.year &&
+        log.date.month == today.month &&
+        log.date.day == today.day
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Get the current Salah count for today
+  int getTodaySalahCount() {
+    final log = getTodaySalahLog();
+    return log?.salahCount ?? 0;
+  }
+
+  // Check if a specific Salah is already logged for today
+  bool isSalahLogged(String prayerName) {
+    final log = getTodaySalahLog();
+    if (log == null) return false;
+    
+    // Map prayer name to count
+    final prayerIndex = {
+      'Fajr': 1,
+      'Dhuhr': 2,
+      'Asr': 3,
+      'Maghrib': 4,
+      'Isha': 5,
+    };
+    
+    final index = prayerIndex[prayerName] ?? 0;
+    return log.salahCount >= index;
+  }
+
   Future<void> logIbadat(IbadatLog log) async {
+    final today = DateTime.now();
+    
+    // If it's Salah, we need special handling
+    if (log.type == 'Salah') {
+      final existingLog = getTodaySalahLog();
+      
+      if (existingLog != null) {
+        // Update existing log with new count (only if count is higher)
+        if (log.salahCount > existingLog.salahCount) {
+          final updatedLog = IbadatLog(
+            type: 'Salah',
+            date: today,
+            salahCount: log.salahCount,
+            sawmType: '',
+            rakahCount: 0,
+            versesCount: 0,
+            surahName: '',
+            sadaqatType: '',
+            note: '',
+            amount: 0.0,
+          );
+          
+          // Remove old log and add updated one
+          _logs.removeWhere((l) => 
+            l.type == 'Salah' &&
+            l.date.year == today.year &&
+            l.date.month == today.month &&
+            l.date.day == today.day
+          );
+          _logs.add(updatedLog);
+          await _storage.saveLogs(_logs);
+          notifyListeners();
+        }
+        return;
+      }
+    } else {
+      // For non-Salah types, check if already logged today
+      final alreadyLogged = _logs.any((l) => 
+        l.type == log.type &&
+        l.date.year == today.year &&
+        l.date.month == today.month &&
+        l.date.day == today.day
+      );
+
+      if (alreadyLogged) {
+        return;
+      }
+    }
+
     _logs.add(log);
     await _storage.saveLogs(_logs);
     
     // Update streaks
-    final today = DateTime.now();
     final yesterday = today.subtract(const Duration(days: 1));
     
     if (_streaks.containsKey(log.type) && 
@@ -56,6 +154,44 @@ class AppProvider extends ChangeNotifier {
     await _storage.saveStreaks(_streaks);
     await _storage.savePoints(_points);
     notifyListeners();
+  }
+
+  // Toggle a specific Salah prayer
+  Future<void> toggleSalah(String prayerName) async {
+    final today = DateTime.now();
+    final currentCount = getTodaySalahCount();
+    
+    // Map prayer name to count
+    final prayerIndex = {
+      'Fajr': 1,
+      'Dhuhr': 2,
+      'Asr': 3,
+      'Maghrib': 4,
+      'Isha': 5,
+    };
+    
+    final index = prayerIndex[prayerName] ?? 0;
+    
+    // If already logged, don't do anything (can't unmark)
+    if (currentCount >= index) {
+      return;
+    }
+    
+    // Log the Salah with updated count
+    final log = IbadatLog(
+      type: 'Salah',
+      date: today,
+      salahCount: index,
+      sawmType: '',
+      rakahCount: 0,
+      versesCount: 0,
+      surahName: '',
+      sadaqatType: '',
+      note: '',
+      amount: 0.0,
+    );
+    
+    await logIbadat(log);
   }
 
   double _calculatePoints(IbadatLog log) {

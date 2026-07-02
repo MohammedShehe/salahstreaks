@@ -16,6 +16,7 @@ class LoggingWidget extends StatefulWidget {
 }
 
 class _LoggingWidgetState extends State<LoggingWidget> {
+  // For Salah - track individual prayers
   final Map<String, bool> _salahTicked = {
     'Fajr': false,
     'Dhuhr': false,
@@ -34,6 +35,38 @@ class _LoggingWidgetState extends State<LoggingWidget> {
   final TextEditingController _noteController = TextEditingController();
   double _sadaqatAmount = 10.0;
 
+  bool _isAlreadyLogged = false;
+  int _currentSalahCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentState();
+  }
+
+  void _loadCurrentState() {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    
+    if (widget.type == 'Salah') {
+      final count = provider.getTodaySalahCount();
+      _currentSalahCount = count;
+      
+      // Mark prayers that are already logged
+      setState(() {
+        _salahTicked['Fajr'] = count >= 1;
+        _salahTicked['Dhuhr'] = count >= 2;
+        _salahTicked['Asr'] = count >= 3;
+        _salahTicked['Maghrib'] = count >= 4;
+        _salahTicked['Isha'] = count >= 5;
+        _isAlreadyLogged = count >= 5; // All 5 prayers done
+      });
+    } else {
+      setState(() {
+        _isAlreadyLogged = provider.isLoggedToday(widget.type);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -47,13 +80,79 @@ class _LoggingWidgetState extends State<LoggingWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                widget.type,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+              Row(
+                children: [
+                  Text(
+                    widget.type,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (widget.type == 'Salah' && _isAlreadyLogged) ...[
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green[700],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'All Prayed ✅',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (widget.type != 'Salah' && _isAlreadyLogged) ...[
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green[700],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Logged Today ✅',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
               Text(
                 dateFormat.format(now),
@@ -74,9 +173,9 @@ class _LoggingWidgetState extends State<LoggingWidget> {
           ),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: _submitLog,
+            onPressed: _isAlreadyLogged ? null : _submitLog,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green[700],
+              backgroundColor: _isAlreadyLogged ? Colors.grey[700] : Colors.green[700],
               minimumSize: const Size(double.infinity, 50),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -114,39 +213,224 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     }
   }
 
+  // ============ SALAH FIELDS - Each prayer individually toggleable ============
   List<Widget> _buildSalahFields() {
+    final prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+    final prayerTimes = ['5:00 AM', '1:00 PM', '4:30 PM', '6:45 PM', '8:00 PM'];
+    final prayerIcons = [
+      Icons.nights_stay,
+      Icons.wb_sunny,
+      Icons.brightness_5,
+      Icons.wb_twilight,
+      Icons.bedtime,
+    ];
+
     return [
-      ..._salahTicked.keys.map((prayer) {
-        return Card(
-          color: Colors.green[900]!.withOpacity(0.3),
-          margin: const EdgeInsets.only(bottom: 8),
-          child: CheckboxListTile(
-            value: _salahTicked[prayer],
-            onChanged: (value) {
-              setState(() {
-                _salahTicked[prayer] = value ?? false;
-              });
-            },
-            title: Text(
-              prayer,
-              style: const TextStyle(color: Colors.white),
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.green[900]!.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green[700]!.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Today\'s Prayers',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green[800],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_salahTicked.values.where((v) => v).length}/5',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            activeColor: Colors.green,
-            checkboxShape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-        );
-      }),
+            const SizedBox(height: 12),
+            ...List.generate(5, (index) {
+              final prayer = prayerOrder[index];
+              final isLogged = _salahTicked[prayer]!;
+              
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: isLogged 
+                      ? Colors.green[800]!.withOpacity(0.3)
+                      : Colors.grey[800]!.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isLogged 
+                        ? Colors.green[600]!.withOpacity(0.5)
+                        : Colors.grey[600]!.withOpacity(0.3),
+                  ),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isLogged 
+                          ? Colors.green[700] 
+                          : Colors.grey[700],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      prayerIcons[index],
+                      color: isLogged ? Colors.white : Colors.grey[400],
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    prayer,
+                    style: TextStyle(
+                      color: isLogged ? Colors.white : Colors.grey[300],
+                      fontWeight: isLogged ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Text(
+                    prayerTimes[index],
+                    style: TextStyle(
+                      color: isLogged ? Colors.green[300] : Colors.grey[500],
+                      fontSize: 12,
+                    ),
+                  ),
+                  trailing: isLogged
+                      ? Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.green[700],
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        )
+                      : ElevatedButton(
+                          onPressed: () => _toggleSalah(prayer),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green[700],
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            'Mark',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                  onTap: isLogged ? null : () => _toggleSalah(prayer),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
     ].animate(interval: 100.ms);
   }
 
-  List<Widget> _buildSawmFields() {
-    return [
-      const Text(
-        'Select Fasting Type:',
-        style: TextStyle(color: Colors.white, fontSize: 16),
+  void _toggleSalah(String prayerName) async {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isLogged = provider.isSalahLogged(prayerName);
+    
+    // If already logged, don't do anything
+    if (isLogged) return;
+    
+    // Toggle the prayer
+    await provider.toggleSalah(prayerName);
+    
+    // Update local state
+    final newCount = provider.getTodaySalahCount();
+    setState(() {
+      _salahTicked['Fajr'] = newCount >= 1;
+      _salahTicked['Dhuhr'] = newCount >= 2;
+      _salahTicked['Asr'] = newCount >= 3;
+      _salahTicked['Maghrib'] = newCount >= 4;
+      _salahTicked['Isha'] = newCount >= 5;
+      _isAlreadyLogged = newCount >= 5;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ $prayerName marked as prayed!'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
       ),
+    );
+    
+    // Close if all 5 prayers are done
+    if (newCount >= 5) {
+      Future.delayed(const Duration(seconds: 1), () {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎉 All 5 prayers completed today! Masha\'Allah!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      });
+    }
+  }
+
+  // ============ OTHER IBADAT TYPES (same as before) ============
+  List<Widget> _buildSawmFields() {
+    if (_isAlreadyLogged) {
+      return [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.green[900]!.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[700]!.withOpacity(0.3)),
+          ),
+          child: Column(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 48),
+              const SizedBox(height: 8),
+              Text(
+                '✅ ${widget.type} logged today',
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                'Come back tomorrow to log again',
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    return [
+      const Text('Select Fasting Type:', style: TextStyle(color: Colors.white, fontSize: 16)),
       const SizedBox(height: 12),
       Row(
         children: [
@@ -174,11 +458,35 @@ class _LoggingWidgetState extends State<LoggingWidget> {
   }
 
   List<Widget> _buildQiyyamFields() {
+    if (_isAlreadyLogged) {
+      return [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.green[900]!.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[700]!.withOpacity(0.3)),
+          ),
+          child: Column(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 48),
+              const SizedBox(height: 8),
+              Text(
+                '✅ ${widget.type} logged today',
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                'Come back tomorrow to log again',
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
     return [
-      const Text(
-        'Tahajjud Rak\'ah:',
-        style: TextStyle(color: Colors.white, fontSize: 16),
-      ),
+      const Text('Tahajjud Rak\'ah:', style: TextStyle(color: Colors.white, fontSize: 16)),
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
@@ -198,10 +506,7 @@ class _LoggingWidgetState extends State<LoggingWidget> {
         }).toList(),
       ),
       const SizedBox(height: 20),
-      const Text(
-        'Witr Rak\'ah:',
-        style: TextStyle(color: Colors.white, fontSize: 16),
-      ),
+      const Text('Witr Rak\'ah:', style: TextStyle(color: Colors.white, fontSize: 16)),
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
@@ -224,6 +529,33 @@ class _LoggingWidgetState extends State<LoggingWidget> {
   }
 
   List<Widget> _buildQuranFields() {
+    if (_isAlreadyLogged) {
+      return [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.green[900]!.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[700]!.withOpacity(0.3)),
+          ),
+          child: Column(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 48),
+              const SizedBox(height: 8),
+              Text(
+                '✅ ${widget.type} logged today',
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                'Come back tomorrow to log again',
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
     return [
       DropdownButtonFormField<String>(
         value: _selectedSurah,
@@ -306,11 +638,35 @@ class _LoggingWidgetState extends State<LoggingWidget> {
   }
 
   List<Widget> _buildSadaqatFields() {
+    if (_isAlreadyLogged) {
+      return [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.green[900]!.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green[700]!.withOpacity(0.3)),
+          ),
+          child: Column(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 48),
+              const SizedBox(height: 8),
+              Text(
+                '✅ ${widget.type} logged today',
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                'Come back tomorrow to log again',
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
     return [
-      const Text(
-        'Type of Sadaqah:',
-        style: TextStyle(color: Colors.white, fontSize: 16),
-      ),
+      const Text('Type of Sadaqah:', style: TextStyle(color: Colors.white, fontSize: 16)),
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
@@ -390,6 +746,9 @@ class _LoggingWidgetState extends State<LoggingWidget> {
   }
 
   String _getSubmitLabel() {
+    if (_isAlreadyLogged) {
+      return '✅ Already Logged Today';
+    }
     switch (widget.type) {
       case 'Salah':
         return 'Prayed';
@@ -410,13 +769,74 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     final provider = Provider.of<AppProvider>(context, listen: false);
     final now = DateTime.now();
     
-    int salahCount = _salahTicked.values.where((v) => v).length;
+    // For Salah, we handle it differently
+    if (widget.type == 'Salah') {
+      // Count how many are ticked
+      int count = _salahTicked.values.where((v) => v).length;
+      if (count == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Please mark at least one prayer'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      
+      // Check if any are already logged (should be handled by toggle)
+      final existingCount = provider.getTodaySalahCount();
+      if (count <= existingCount) {
+        Navigator.pop(context);
+        return;
+      }
+      
+      // Log the Salah with the count
+      final log = IbadatLog(
+        type: 'Salah',
+        date: now,
+        salahCount: count,
+        sawmType: '',
+        rakahCount: 0,
+        versesCount: 0,
+        surahName: '',
+        sadaqatType: '',
+        note: '',
+        amount: 0.0,
+      );
+      
+      provider.logIbadat(log);
+      Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ ${count}/5 Salah logged!'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    
+    // For non-Salah types
+    if (provider.isLoggedToday(widget.type)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Already logged today!'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context);
+      return;
+    }
+    
     int versesCount = _verseEnd - _verseStart + 1;
     
     final log = IbadatLog(
       type: widget.type,
       date: now,
-      salahCount: widget.type == 'Salah' ? salahCount : 0,
+      salahCount: 0,
       sawmType: widget.type == 'Sawm' ? _sawmType : '',
       rakahCount: widget.type == 'Qiyyam' ? _tahajjudRakah + _witrRakah : 0,
       versesCount: widget.type == 'Quran' ? versesCount : 0,
