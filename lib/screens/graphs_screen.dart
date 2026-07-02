@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:salahstreaks/providers/app_provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'dart:math';
 
 class GraphsScreen extends StatefulWidget {
   const GraphsScreen({super.key});
@@ -13,14 +12,14 @@ class GraphsScreen extends StatefulWidget {
 }
 
 class _GraphsScreenState extends State<GraphsScreen> {
-  String _selectedPeriod = 'Daily';
+  String _selectedPeriod = 'Weekly';
   String _selectedGraphType = 'Bar';
   String _selectedIbadat = 'All';
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
 
   final List<String> _periods = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
-  final List<String> _graphTypes = ['Bar', 'Line', 'Pie', 'Donut', 'Dotted'];
+  final List<String> _graphTypes = ['Bar', 'Line', 'Pie', 'Donut'];
   final List<String> _ibadatTypes = ['All', 'Salah', 'Sawm', 'Qiyyam', 'Quran', 'Sadaqat'];
 
   @override
@@ -31,10 +30,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0A0E1A),
-              Color(0xFF1A1F2E),
-            ],
+            colors: [Color(0xFF0A0E1A), Color(0xFF1A1F2E)],
           ),
         ),
         child: SafeArea(
@@ -70,9 +66,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.2),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.green[700]!.withOpacity(0.2),
-        ),
+        border: Border.all(color: Colors.green[700]!.withOpacity(0.2)),
       ),
       child: Column(
         children: [
@@ -204,47 +198,25 @@ class _GraphsScreenState extends State<GraphsScreen> {
 
   Widget _buildGraph() {
     final provider = Provider.of<AppProvider>(context);
-    final logs = provider.logs;
+    final allLogs = provider.logs;
     
-    if (logs.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.show_chart, size: 80, color: Colors.grey[600]),
-            const SizedBox(height: 16),
-            Text(
-              'No data available yet',
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Start logging your ibadat to see charts!',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
+    if (allLogs.isEmpty) {
+      return _buildEmptyState();
     }
 
-    final filteredLogs = _selectedIbadat != 'All' 
-        ? logs.where((log) => log.type == _selectedIbadat).toList()
-        : logs;
+    // 1. Filter by Ibadat type
+    List<dynamic> filteredLogs = _selectedIbadat != 'All' 
+        ? allLogs.where((log) => log.type == _selectedIbadat).toList()
+        : allLogs;
+
+    // 2. Filter by time period
+    filteredLogs = _filterByPeriod(filteredLogs);
 
     if (filteredLogs.isEmpty) {
       return Center(
         child: Text(
-          'No data for selected Ibadat',
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 16,
-          ),
+          'No data for selected filters',
+          style: TextStyle(color: Colors.grey[400], fontSize: 16),
         ),
       );
     }
@@ -252,6 +224,62 @@ class _GraphsScreenState extends State<GraphsScreen> {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 500),
       child: _buildSelectedGraph(filteredLogs),
+    );
+  }
+
+  List _filterByPeriod(List logs) {
+    final now = DateTime.now();
+    
+    switch (_selectedPeriod) {
+      case 'Daily':
+        // Today only
+        return logs.where((log) =>
+          log.date.year == now.year &&
+          log.date.month == now.month &&
+          log.date.day == now.day
+        ).toList();
+
+      case 'Weekly':
+        // Last 7 days
+        final weekAgo = now.subtract(const Duration(days: 7));
+        return logs.where((log) => log.date.isAfter(weekAgo)).toList();
+
+      case 'Monthly':
+        // Selected month only
+        return logs.where((log) =>
+          log.date.month == _selectedMonth &&
+          log.date.year == _selectedYear
+        ).toList();
+
+      case 'Yearly':
+        // Selected year only
+        return logs.where((log) =>
+          log.date.year == _selectedYear
+        ).toList();
+
+      default:
+        return logs;
+    }
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.show_chart, size: 80, color: Colors.grey[600]),
+          const SizedBox(height: 16),
+          Text(
+            'No data available yet',
+            style: TextStyle(color: Colors.grey[400], fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Start logging your ibadat to see charts!',
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          ),
+        ],
+      ),
     );
   }
 
@@ -265,43 +293,37 @@ class _GraphsScreenState extends State<GraphsScreen> {
         return _buildPieChart(logs);
       case 'Donut':
         return _buildDonutChart(logs);
-      case 'Dotted':
-        return _buildDottedChart(logs);
       default:
         return _buildBarChart(logs);
     }
   }
 
-  Widget _buildBarChart(List logs) {
-    final Map<String, int> data = {};
-    for (final log in logs) {
-      data[log.type] = (data[log.type] ?? 0) + 1;
-    }
+  // ============ UPDATED CHARTS WITH TIME-AWARE DATA ============
 
+  Widget _buildBarChart(List logs) {
+    final data = _getTimeSeriesData(logs);
     final colors = [Colors.green, Colors.blue, Colors.orange, Colors.purple, Colors.red];
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.green[700]!.withOpacity(0.2),
-        ),
+        border: Border.all(color: Colors.green[700]!.withOpacity(0.2)),
       ),
       child: BarChart(
         BarChartData(
           alignment: BarChartAlignment.spaceAround,
-          barGroups: data.entries.toList().asMap().entries.map((entry) {
+          barGroups: data.asMap().entries.map((entry) {
             final index = entry.key;
             final entryData = entry.value;
             return BarChartGroupData(
               x: index,
               barRods: [
                 BarChartRodData(
-                  toY: entryData.value.toDouble(),
+                  toY: entryData['value'].toDouble(),
                   color: colors[index % colors.length],
-                  width: 40,
+                  width: 30,
                   borderRadius: BorderRadius.circular(8),
                 ),
               ],
@@ -312,10 +334,14 @@ class _GraphsScreenState extends State<GraphsScreen> {
               sideTitles: SideTitles(
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
-                  return Text(
-                    data.keys.toList()[value.toInt()],
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  );
+                  if (value.toInt() < data.length) {
+                    return Text(
+                      data[value.toInt()]['label'],
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                      textAlign: TextAlign.center,
+                    );
+                  }
+                  return const Text('');
                 },
               ),
             ),
@@ -337,10 +363,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
             drawHorizontalLine: true,
             horizontalInterval: 1,
             getDrawingHorizontalLine: (value) {
-              return FlLine(
-                color: Colors.grey[800]!,
-                strokeWidth: 1,
-              );
+              return FlLine(color: Colors.grey[800]!, strokeWidth: 1);
             },
           ),
         ),
@@ -349,26 +372,21 @@ class _GraphsScreenState extends State<GraphsScreen> {
   }
 
   Widget _buildLineChart(List logs) {
-    final Map<String, int> data = {};
-    for (final log in logs) {
-      data[log.type] = (data[log.type] ?? 0) + 1;
-    }
+    final data = _getTimeSeriesData(logs);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.green[700]!.withOpacity(0.2),
-        ),
+        border: Border.all(color: Colors.green[700]!.withOpacity(0.2)),
       ),
       child: LineChart(
         LineChartData(
           lineBarsData: [
             LineChartBarData(
-              spots: data.entries.toList().asMap().entries.map((entry) {
-                return FlSpot(entry.key.toDouble(), entry.value.value.toDouble());
+              spots: data.asMap().entries.map((entry) {
+                return FlSpot(entry.key.toDouble(), entry.value['value'].toDouble());
               }).toList(),
               color: Colors.green,
               barWidth: 3,
@@ -390,10 +408,14 @@ class _GraphsScreenState extends State<GraphsScreen> {
               sideTitles: SideTitles(
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
-                  return Text(
-                    data.keys.toList()[value.toInt()],
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  );
+                  if (value.toInt() < data.length) {
+                    return Text(
+                      data[value.toInt()]['label'],
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
+                      textAlign: TextAlign.center,
+                    );
+                  }
+                  return const Text('');
                 },
               ),
             ),
@@ -415,10 +437,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
             drawHorizontalLine: true,
             horizontalInterval: 1,
             getDrawingHorizontalLine: (value) {
-              return FlLine(
-                color: Colors.grey[800]!,
-                strokeWidth: 1,
-              );
+              return FlLine(color: Colors.grey[800]!, strokeWidth: 1);
             },
           ),
         ),
@@ -426,15 +445,110 @@ class _GraphsScreenState extends State<GraphsScreen> {
     );
   }
 
+  // ============ HELPER: Get time-series data based on selected period ============
+  List<Map<String, dynamic>> _getTimeSeriesData(List logs) {
+    final now = DateTime.now();
+    final result = <Map<String, dynamic>>[];
+
+    switch (_selectedPeriod) {
+      case 'Daily':
+        // Show hourly breakdown for today
+        for (int hour = 0; hour < 24; hour++) {
+          final count = logs.where((log) => log.date.hour == hour).length;
+          result.add({
+            'label': '$hour:00',
+            'value': count,
+          });
+        }
+        break;
+
+      case 'Weekly':
+        // Show daily breakdown for last 7 days
+        for (int i = 6; i >= 0; i--) {
+          final date = now.subtract(Duration(days: i));
+          final count = logs.where((log) =>
+            log.date.year == date.year &&
+            log.date.month == date.month &&
+            log.date.day == date.day
+          ).length;
+          result.add({
+            'label': DateFormat('E').format(date),
+            'value': count,
+          });
+        }
+        break;
+
+      case 'Monthly':
+        // Show weekly breakdown for the selected month
+        final daysInMonth = DateTime(_selectedYear, _selectedMonth + 1, 0).day;
+        for (int week = 0; week < 4; week++) {
+          final start = week * 7 + 1;
+          final end = (week + 1) * 7;
+          final count = logs.where((log) =>
+            log.date.day >= start &&
+            log.date.day <= end &&
+            log.date.month == _selectedMonth &&
+            log.date.year == _selectedYear
+          ).length;
+          result.add({
+            'label': 'W${week + 1}',
+            'value': count,
+          });
+        }
+        break;
+
+      case 'Yearly':
+        // Show monthly breakdown for the selected year
+        for (int month = 1; month <= 12; month++) {
+          final count = logs.where((log) =>
+            log.date.month == month &&
+            log.date.year == _selectedYear
+          ).length;
+          result.add({
+            'label': DateFormat('MMM').format(DateTime(_selectedYear, month)),
+            'value': count,
+          });
+        }
+        break;
+
+      default:
+        // Default: show by day of week
+        for (int i = 6; i >= 0; i--) {
+          final date = now.subtract(Duration(days: i));
+          final count = logs.where((log) =>
+            log.date.year == date.year &&
+            log.date.month == date.month &&
+            log.date.day == date.day
+          ).length;
+          result.add({
+            'label': DateFormat('E').format(date),
+            'value': count,
+          });
+        }
+    }
+
+    return result;
+  }
+
+  // ============ PIE CHART (shows distribution by type, filtered by period) ============
   Widget _buildPieChart(List logs) {
     final Map<String, int> data = {};
     for (final log in logs) {
       data[log.type] = (data[log.type] ?? 0) + 1;
     }
 
+    if (data.isEmpty) {
+      return Center(
+        child: Text(
+          'No data for this period',
+          style: TextStyle(color: Colors.grey[400]),
+        ),
+      );
+    }
+
     final colors = [Colors.green, Colors.blue, Colors.orange, Colors.purple, Colors.red];
     final total = data.values.fold(0, (sum, value) => sum + value);
-    final List<PieChartSectionData> sections = [];
+    final sections = <PieChartSectionData>[];
 
     data.entries.toList().asMap().entries.forEach((entry) {
       final index = entry.key;
@@ -460,16 +574,47 @@ class _GraphsScreenState extends State<GraphsScreen> {
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.green[700]!.withOpacity(0.2),
-        ),
+        border: Border.all(color: Colors.green[700]!.withOpacity(0.2)),
       ),
-      child: PieChart(
-        PieChartData(
-          sections: sections,
-          sectionsSpace: 2,
-          centerSpaceRadius: 40,
-        ),
+      child: Column(
+        children: [
+          Expanded(
+            child: PieChart(
+              PieChartData(
+                sections: sections,
+                sectionsSpace: 2,
+                centerSpaceRadius: 40,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Legend
+          Wrap(
+            spacing: 12,
+            children: data.keys.toList().asMap().entries.map((entry) {
+              final index = entry.key;
+              final type = entry.value;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: colors[index % colors.length],
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$type (${data[type]})',
+                    style: TextStyle(color: Colors.grey[300], fontSize: 11),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -480,9 +625,18 @@ class _GraphsScreenState extends State<GraphsScreen> {
       data[log.type] = (data[log.type] ?? 0) + 1;
     }
 
+    if (data.isEmpty) {
+      return Center(
+        child: Text(
+          'No data for this period',
+          style: TextStyle(color: Colors.grey[400]),
+        ),
+      );
+    }
+
     final colors = [Colors.green, Colors.blue, Colors.orange, Colors.purple, Colors.red];
     final total = data.values.fold(0, (sum, value) => sum + value);
-    final List<PieChartSectionData> sections = [];
+    final sections = <PieChartSectionData>[];
 
     data.entries.toList().asMap().entries.forEach((entry) {
       final index = entry.key;
@@ -508,85 +662,26 @@ class _GraphsScreenState extends State<GraphsScreen> {
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.green[700]!.withOpacity(0.2),
-        ),
+        border: Border.all(color: Colors.green[700]!.withOpacity(0.2)),
       ),
-      child: PieChart(
-        PieChartData(
-          sections: sections,
-          sectionsSpace: 2,
-          centerSpaceRadius: 50,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDottedChart(List logs) {
-    final Map<String, int> data = {};
-    for (final log in logs) {
-      data[log.type] = (data[log.type] ?? 0) + 1;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.green[900]!.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.green[700]!.withOpacity(0.2),
-        ),
-      ),
-      child: LineChart(
-        LineChartData(
-          lineBarsData: [
-            LineChartBarData(
-              spots: data.entries.toList().asMap().entries.map((entry) {
-                return FlSpot(entry.key.toDouble(), entry.value.value.toDouble());
-              }).toList(),
-              color: Colors.green,
-              barWidth: 2,
-              dotData: const FlDotData(show: false),
-              dashArray: const [5, 5],
-            ),
-          ],
-          titlesData: FlTitlesData(
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    data.keys.toList()[value.toInt()],
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  );
-                },
-              ),
-            ),
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 40,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    '${value.toInt()}',
-                    style: const TextStyle(color: Colors.white, fontSize: 10),
-                  );
-                },
+      child: Column(
+        children: [
+          Expanded(
+            child: PieChart(
+              PieChartData(
+                sections: sections,
+                sectionsSpace: 2,
+                centerSpaceRadius: 50,
+                centerSpaceColor: const Color(0xFF1A1F2E),
               ),
             ),
           ),
-          gridData: FlGridData(
-            show: true,
-            drawHorizontalLine: true,
-            horizontalInterval: 1,
-            getDrawingHorizontalLine: (value) {
-              return FlLine(
-                color: Colors.grey[800]!,
-                strokeWidth: 1,
-              );
-            },
+          const SizedBox(height: 8),
+          Text(
+            'Total: $total entries',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
-        ),
+        ],
       ),
     );
   }
