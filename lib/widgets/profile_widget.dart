@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:salahstreaks/providers/app_provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileWidget extends StatefulWidget {
   const ProfileWidget({super.key});
@@ -12,6 +15,44 @@ class ProfileWidget extends StatefulWidget {
 
 class _ProfileWidgetState extends State<ProfileWidget> {
   bool _showProfile = false;
+  String? _profileImagePath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileImage();
+  }
+
+  Future<void> _loadProfileImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _profileImagePath = prefs.getString('profile_image_path');
+    });
+  }
+
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 200,
+      maxHeight: 200,
+      imageQuality: 80,
+    );
+    
+    if (image != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_image_path', image.path);
+      setState(() {
+        _profileImagePath = image.path;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Profile picture updated!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +79,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             ),
             child: Row(
               children: [
+                // Profile picture with app logo as default fallback
                 Container(
                   width: 50,
                   height: 50,
@@ -60,11 +102,31 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.person,
-                    color: Colors.white,
-                    size: 30,
-                  ),
+                  child: _profileImagePath != null && File(_profileImagePath!).existsSync()
+                      ? ClipOval(
+                          child: Image.file(
+                            File(_profileImagePath!),
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : ClipOval(
+                          child: Image.asset(
+                            'assets/images/profile.jpg',
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              // Fallback to person icon if image fails to load
+                              return const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 30,
+                              );
+                            },
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -99,13 +161,14 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                     ],
                   ),
                 ),
+                // 🔥 Streak Counter
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.green[800]!.withOpacity(0.3),
+                    color: Colors.orange[900]!.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: Colors.green[700]!.withOpacity(0.3),
+                      color: Colors.orange[700]!.withOpacity(0.3),
                     ),
                   ),
                   child: Row(
@@ -162,26 +225,81 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.green[600]!,
-                                Colors.green[800]!,
-                              ],
-                            ),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.green[400]!,
-                              width: 3,
-                            ),
+                        // Profile picture in popup
+                        GestureDetector(
+                          onTap: _pickImage,
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.green[600]!,
+                                      Colors.green[800]!,
+                                    ],
+                                  ),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.green[400]!,
+                                    width: 3,
+                                  ),
+                                ),
+                                child: _profileImagePath != null && File(_profileImagePath!).existsSync()
+                                    ? ClipOval(
+                                        child: Image.file(
+                                          File(_profileImagePath!),
+                                          width: 80,
+                                          height: 80,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    : ClipOval(
+                                        child: Image.asset(
+                                          'assets/images/profile.jpg',
+                                          width: 80,
+                                          height: 80,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return const Icon(
+                                              Icons.person,
+                                              color: Colors.white,
+                                              size: 40,
+                                            );
+                                          },
+                                        ),
+                                      ),
+                              ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green[600],
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          child: const Icon(
-                            Icons.person,
-                            color: Colors.white,
-                            size: 40,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap to change photo',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
                           ),
                         ),
                         const SizedBox(height: 16),

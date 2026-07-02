@@ -10,21 +10,28 @@ import 'package:salahstreaks/services/reminder_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize reminder service and schedule all reminders
+  // Initialize reminder service
   final reminderService = ReminderService();
   await reminderService.initialize();
-  await reminderService.scheduleAllReminders();
+  // Try to schedule native reminders, but don't fail if not available
+  try {
+    await reminderService.scheduleAllReminders();
+  } catch (e) {
+    print('Native reminders not available, using in-app only');
+  }
   
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppProvider(),
-      child: const SalahStreaksApp(),
+      child: SalahStreaksApp(reminderService: reminderService),
     ),
   );
 }
 
 class SalahStreaksApp extends StatelessWidget {
-  const SalahStreaksApp({super.key});
+  final ReminderService reminderService;
+
+  const SalahStreaksApp({super.key, required this.reminderService});
 
   @override
   Widget build(BuildContext context) {
@@ -46,20 +53,23 @@ class SalahStreaksApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
-      home: const MainScreen(),
+      home: MainScreen(reminderService: reminderService),
     );
   }
 }
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  final ReminderService reminderService;
+
+  const MainScreen({super.key, required this.reminderService});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
+  late final PageController _pageController;
 
   final List<Widget> _screens = const [
     HomeScreen(),
@@ -68,23 +78,65 @@ class _MainScreenState extends State<MainScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: 0);
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Check reminders after 2 seconds
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) _checkReminders();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkReminders();
+    }
+  }
+
+  void _checkReminders() {
+    final dueReminders = widget.reminderService.checkDueReminders();
+    for (final reminder in dueReminders) {
+      widget.reminderService.markReminderShown(reminder['key']!);
+      widget.reminderService.showInAppReminder(
+        context,
+        reminder['title']!,
+        reminder['body']!,
+      );
+    }
+  }
+
+  void _onPageChanged(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  void _onBottomNavTap(int index) {
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 500),
-        child: _screens[_selectedIndex],
-        transitionBuilder: (child, animation) {
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.3, 0),
-                end: Offset.zero,
-              ).animate(animation),
-              child: child,
-            ),
-          );
-        },
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: _onPageChanged,
+        physics: const BouncingScrollPhysics(),
+        children: _screens,
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -106,11 +158,7 @@ class _MainScreenState extends State<MainScreen> {
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
+          onTap: _onBottomNavTap,
           backgroundColor: Colors.transparent,
           elevation: 0,
           selectedItemColor: const Color(0xFF4CAF50),
