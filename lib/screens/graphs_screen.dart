@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:salahstreaks/providers/app_provider.dart';
+import 'package:salahstreaks/models/ibadat_model.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
@@ -87,17 +88,19 @@ class _GraphsScreenState extends State<GraphsScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildMonthSelector(),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildYearSelector(),
-              ),
-            ],
-          ),
+          if (_selectedPeriod == 'Monthly' || _selectedPeriod == 'Yearly')
+            Row(
+              children: [
+                if (_selectedPeriod == 'Monthly')
+                  Expanded(
+                    child: _buildMonthSelector(),
+                  ),
+                if (_selectedPeriod == 'Monthly') const SizedBox(width: 8),
+                Expanded(
+                  child: _buildYearSelector(),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -120,6 +123,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
             spacing: 4,
             children: options.map((option) {
               return FilterChip(
+                key: ValueKey('filter_$option'),
                 label: Text(option, style: TextStyle(
                   fontSize: 12,
                   color: selected == option ? Colors.white : Colors.grey[400],
@@ -153,6 +157,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
           onChanged: (value) => setState(() => _selectedMonth = value!),
           items: List.generate(12, (index) {
             return DropdownMenuItem(
+              key: ValueKey('month_${index + 1}'),
               value: index + 1,
               child: Text(
                 DateFormat('MMMM').format(DateTime(2024, index + 1)),
@@ -185,6 +190,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
           items: List.generate(10, (index) {
             final year = currentYear - index;
             return DropdownMenuItem(
+              key: ValueKey('year_$year'),
               value: year,
               child: Text('$year', style: const TextStyle(color: Colors.white)),
             );
@@ -205,7 +211,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
     }
 
     // 1. Filter by Ibadat type
-    List<dynamic> filteredLogs = _selectedIbadat != 'All' 
+    List<IbadatLog> filteredLogs = _selectedIbadat != 'All' 
         ? allLogs.where((log) => log.type == _selectedIbadat).toList()
         : allLogs;
 
@@ -223,11 +229,11 @@ class _GraphsScreenState extends State<GraphsScreen> {
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 500),
-      child: _buildSelectedGraph(filteredLogs),
+      child: _buildSelectedGraph(filteredLogs, key: ValueKey('${_selectedGraphType}_${_selectedPeriod}_${_selectedIbadat}')),
     );
   }
 
-  List _filterByPeriod(List logs) {
+  List<IbadatLog> _filterByPeriod(List<IbadatLog> logs) {
     final now = DateTime.now();
     
     switch (_selectedPeriod) {
@@ -240,9 +246,14 @@ class _GraphsScreenState extends State<GraphsScreen> {
         ).toList();
 
       case 'Weekly':
-        // Last 7 days
-        final weekAgo = now.subtract(const Duration(days: 7));
-        return logs.where((log) => log.date.isAfter(weekAgo)).toList();
+        // Last 7 days (including today)
+        final weekAgo = DateTime(now.year, now.month, now.day - 7);
+        return logs.where((log) => 
+          log.date.isAfter(weekAgo) || 
+          (log.date.year == weekAgo.year && 
+           log.date.month == weekAgo.month && 
+           log.date.day == weekAgo.day)
+        ).toList();
 
       case 'Monthly':
         // Selected month only
@@ -283,28 +294,38 @@ class _GraphsScreenState extends State<GraphsScreen> {
     );
   }
 
-  Widget _buildSelectedGraph(List logs) {
+  Widget _buildSelectedGraph(List<IbadatLog> logs, {Key? key}) {
     switch (_selectedGraphType) {
       case 'Bar':
-        return _buildBarChart(logs);
+        return _buildBarChart(logs, key: key);
       case 'Line':
-        return _buildLineChart(logs);
+        return _buildLineChart(logs, key: key);
       case 'Pie':
-        return _buildPieChart(logs);
+        return _buildPieChart(logs, key: key);
       case 'Donut':
-        return _buildDonutChart(logs);
+        return _buildDonutChart(logs, key: key);
       default:
-        return _buildBarChart(logs);
+        return _buildBarChart(logs, key: key);
     }
   }
 
   // ============ UPDATED CHARTS WITH TIME-AWARE DATA ============
 
-  Widget _buildBarChart(List logs) {
+  Widget _buildBarChart(List<IbadatLog> logs, {Key? key}) {
     final data = _getTimeSeriesData(logs);
     final colors = [Colors.green, Colors.blue, Colors.orange, Colors.purple, Colors.red];
 
+    if (data.isEmpty) {
+      return const Center(
+        child: Text(
+          'No data available',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
     return Container(
+      key: key,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.1),
@@ -314,6 +335,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
       child: BarChart(
         BarChartData(
           alignment: BarChartAlignment.spaceAround,
+          maxY: _getMaxValue(data) * 1.2,
           barGroups: data.asMap().entries.map((entry) {
             final index = entry.key;
             final entryData = entry.value;
@@ -321,12 +343,13 @@ class _GraphsScreenState extends State<GraphsScreen> {
               x: index,
               barRods: [
                 BarChartRodData(
-                  toY: entryData['value'].toDouble(),
+                  toY: (entryData['value'] as num).toDouble(),
                   color: colors[index % colors.length],
                   width: 30,
                   borderRadius: BorderRadius.circular(8),
                 ),
               ],
+              showingTooltipIndicators: [],
             );
           }).toList(),
           titlesData: FlTitlesData(
@@ -335,10 +358,13 @@ class _GraphsScreenState extends State<GraphsScreen> {
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
                   if (value.toInt() < data.length) {
-                    return Text(
-                      data[value.toInt()]['label'],
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
-                      textAlign: TextAlign.center,
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        data[value.toInt()]['label'],
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                        textAlign: TextAlign.center,
+                      ),
                     );
                   }
                   return const Text('');
@@ -351,30 +377,49 @@ class _GraphsScreenState extends State<GraphsScreen> {
                 reservedSize: 40,
                 getTitlesWidget: (value, meta) {
                   return Text(
-                    '${value.toInt()}',
+                    value.toInt().toString(),
                     style: const TextStyle(color: Colors.white, fontSize: 10),
                   );
                 },
               ),
             ),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
           ),
           gridData: FlGridData(
             show: true,
             drawHorizontalLine: true,
-            horizontalInterval: 1,
+            horizontalInterval: _getGridInterval(data),
             getDrawingHorizontalLine: (value) {
               return FlLine(color: Colors.grey[800]!, strokeWidth: 1);
             },
+          ),
+          borderData: FlBorderData(
+            show: false,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildLineChart(List logs) {
+  Widget _buildLineChart(List<IbadatLog> logs, {Key? key}) {
     final data = _getTimeSeriesData(logs);
 
+    if (data.isEmpty) {
+      return const Center(
+        child: Text(
+          'No data available',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
     return Container(
+      key: key,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.1),
@@ -386,10 +431,14 @@ class _GraphsScreenState extends State<GraphsScreen> {
           lineBarsData: [
             LineChartBarData(
               spots: data.asMap().entries.map((entry) {
-                return FlSpot(entry.key.toDouble(), entry.value['value'].toDouble());
+                return FlSpot(
+                  entry.key.toDouble(), 
+                  (entry.value['value'] as num).toDouble()
+                );
               }).toList(),
               color: Colors.green,
               barWidth: 3,
+              isCurved: true,
               dotData: FlDotData(
                 show: true,
                 getDotPainter: (spot, percent, barData, index) {
@@ -401,6 +450,10 @@ class _GraphsScreenState extends State<GraphsScreen> {
                   );
                 },
               ),
+              belowBarData: BarAreaData(
+                show: true,
+                color: Colors.green.withOpacity(0.1),
+              ),
             ),
           ],
           titlesData: FlTitlesData(
@@ -409,10 +462,13 @@ class _GraphsScreenState extends State<GraphsScreen> {
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
                   if (value.toInt() < data.length) {
-                    return Text(
-                      data[value.toInt()]['label'],
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
-                      textAlign: TextAlign.center,
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        data[value.toInt()]['label'],
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                        textAlign: TextAlign.center,
+                      ),
                     );
                   }
                   return const Text('');
@@ -425,28 +481,41 @@ class _GraphsScreenState extends State<GraphsScreen> {
                 reservedSize: 40,
                 getTitlesWidget: (value, meta) {
                   return Text(
-                    '${value.toInt()}',
+                    value.toInt().toString(),
                     style: const TextStyle(color: Colors.white, fontSize: 10),
                   );
                 },
               ),
             ),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
           ),
           gridData: FlGridData(
             show: true,
             drawHorizontalLine: true,
-            horizontalInterval: 1,
+            horizontalInterval: _getGridInterval(data),
             getDrawingHorizontalLine: (value) {
               return FlLine(color: Colors.grey[800]!, strokeWidth: 1);
             },
           ),
+          borderData: FlBorderData(
+            show: false,
+          ),
+          minX: 0,
+          maxX: data.length - 1,
+          minY: 0,
+          maxY: _getMaxValue(data) * 1.2,
         ),
       ),
     );
   }
 
   // ============ HELPER: Get time-series data based on selected period ============
-  List<Map<String, dynamic>> _getTimeSeriesData(List logs) {
+  List<Map<String, dynamic>> _getTimeSeriesData(List<IbadatLog> logs) {
     final now = DateTime.now();
     final result = <Map<String, dynamic>>[];
 
@@ -456,7 +525,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
         for (int hour = 0; hour < 24; hour++) {
           final count = logs.where((log) => log.date.hour == hour).length;
           result.add({
-            'label': '$hour:00',
+            'label': hour == 0 ? '12 AM' : hour < 12 ? '$hour AM' : hour == 12 ? '12 PM' : '${hour - 12} PM',
             'value': count,
           });
         }
@@ -465,7 +534,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
       case 'Weekly':
         // Show daily breakdown for last 7 days
         for (int i = 6; i >= 0; i--) {
-          final date = now.subtract(Duration(days: i));
+          final date = DateTime(now.year, now.month, now.day - i);
           final count = logs.where((log) =>
             log.date.year == date.year &&
             log.date.month == date.month &&
@@ -479,19 +548,16 @@ class _GraphsScreenState extends State<GraphsScreen> {
         break;
 
       case 'Monthly':
-        // Show weekly breakdown for the selected month
+        // Show daily breakdown for the selected month
         final daysInMonth = DateTime(_selectedYear, _selectedMonth + 1, 0).day;
-        for (int week = 0; week < 4; week++) {
-          final start = week * 7 + 1;
-          final end = (week + 1) * 7;
+        for (int day = 1; day <= daysInMonth; day++) {
           final count = logs.where((log) =>
-            log.date.day >= start &&
-            log.date.day <= end &&
+            log.date.day == day &&
             log.date.month == _selectedMonth &&
             log.date.year == _selectedYear
           ).length;
           result.add({
-            'label': 'W${week + 1}',
+            'label': '$day',
             'value': count,
           });
         }
@@ -514,7 +580,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
       default:
         // Default: show by day of week
         for (int i = 6; i >= 0; i--) {
-          final date = now.subtract(Duration(days: i));
+          final date = DateTime(now.year, now.month, now.day - i);
           final count = logs.where((log) =>
             log.date.year == date.year &&
             log.date.month == date.month &&
@@ -530,8 +596,26 @@ class _GraphsScreenState extends State<GraphsScreen> {
     return result;
   }
 
-  // ============ PIE CHART (shows distribution by type, filtered by period) ============
-  Widget _buildPieChart(List logs) {
+  double _getMaxValue(List<Map<String, dynamic>> data) {
+    if (data.isEmpty) return 1;
+    final max = data.fold(0.0, (max, item) {
+      final value = (item['value'] as num).toDouble();
+      return value > max ? value : max;
+    });
+    return max < 1 ? 1 : max;
+  }
+
+  double _getGridInterval(List<Map<String, dynamic>> data) {
+    final max = _getMaxValue(data);
+    if (max <= 1) return 1;
+    if (max <= 5) return 1;
+    if (max <= 10) return 2;
+    if (max <= 20) return 5;
+    return 10;
+  }
+
+  // ============ PIE CHART ============
+  Widget _buildPieChart(List<IbadatLog> logs, {Key? key}) {
     final Map<String, int> data = {};
     for (final log in logs) {
       data[log.type] = (data[log.type] ?? 0) + 1;
@@ -570,6 +654,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
     });
 
     return Container(
+      key: key,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.1),
@@ -595,6 +680,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
               final index = entry.key;
               final type = entry.value;
               return Row(
+                key: ValueKey('legend_$type'),
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
@@ -619,7 +705,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
     );
   }
 
-  Widget _buildDonutChart(List logs) {
+  Widget _buildDonutChart(List<IbadatLog> logs, {Key? key}) {
     final Map<String, int> data = {};
     for (final log in logs) {
       data[log.type] = (data[log.type] ?? 0) + 1;
@@ -658,6 +744,7 @@ class _GraphsScreenState extends State<GraphsScreen> {
     });
 
     return Container(
+      key: key,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.green[900]!.withOpacity(0.1),

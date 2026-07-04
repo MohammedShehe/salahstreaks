@@ -26,10 +26,21 @@ class AppProvider extends ChangeNotifier {
     _logs = await _storage.loadLogs();
     _streaks = await _storage.loadStreaks();
     _points = await _storage.loadPoints();
+    
+    // Recalculate streaks based on logs to ensure accuracy
+    await _recalculateStreaks();
+    
+    // Update total streak in user data
+    final totalStreak = _streaks.values.fold(0, (sum, value) => sum + value);
+    if (_userData != null) {
+      _userData!['streaks'] = totalStreak;
+      await _storage.saveUserData(_userData!);
+    }
+    
     notifyListeners();
   }
 
-  // ✅ ADD THIS METHOD - Check if any ibadat type is already logged today
+  // Check if any ibadat type is already logged today
   bool isLoggedToday(String type) {
     final today = DateTime.now();
     return _logs.any((log) => 
@@ -79,8 +90,14 @@ class AppProvider extends ChangeNotifier {
     return log.salahCount >= index;
   }
 
+  // Get total streak across all ibadat types
+  int getTotalStreak() {
+    return _streaks.values.fold(0, (sum, value) => sum + value);
+  }
+
   Future<void> logIbadat(IbadatLog log) async {
     final today = DateTime.now();
+    final yesterday = today.subtract(const Duration(days: 1));
     
     // If it's Salah, we need special handling
     if (log.type == 'Salah') {
@@ -111,6 +128,10 @@ class AppProvider extends ChangeNotifier {
           );
           _logs.add(updatedLog);
           await _storage.saveLogs(_logs);
+          
+          // Update streaks for Salah
+          await _updateStreak('Salah', today, yesterday);
+          await _updateTotalStreak();
           notifyListeners();
         }
         return;
@@ -132,27 +153,17 @@ class AppProvider extends ChangeNotifier {
     _logs.add(log);
     await _storage.saveLogs(_logs);
     
-    // Update streaks
-    final yesterday = today.subtract(const Duration(days: 1));
-    
-    if (_streaks.containsKey(log.type) && 
-        _logs.where((l) => 
-          l.type == log.type && 
-          l.date.year == yesterday.year &&
-          l.date.month == yesterday.month &&
-          l.date.day == yesterday.day
-        ).isNotEmpty) {
-      _streaks[log.type] = (_streaks[log.type] ?? 0) + 1;
-    } else {
-      _streaks[log.type] = 1;
-    }
+    // Update streaks for the specific type
+    await _updateStreak(log.type, today, yesterday);
     
     // Calculate points
     final points = _calculatePoints(log);
     _points[log.type] = (_points[log.type] ?? 0) + points;
-    
-    await _storage.saveStreaks(_streaks);
     await _storage.savePoints(_points);
+    
+    // Update total streak in user data
+    await _updateTotalStreak();
+    
     notifyListeners();
   }
 
@@ -192,6 +203,127 @@ class AppProvider extends ChangeNotifier {
     );
     
     await logIbadat(log);
+  }
+
+  // Helper method to update streak for a specific type
+  Future<void> _updateStreak(String type, DateTime today, DateTime yesterday) async {
+    // Check if there's a log for yesterday
+    final hasYesterdayLog = _logs.any((l) => 
+      l.type == type && 
+      l.date.year == yesterday.year &&
+      l.date.month == yesterday.month &&
+      l.date.day == yesterday.day
+    );
+    
+    // Check if there's already a log for today
+    final hasTodayLog = _logs.any((l) => 
+      l.type == type && 
+      l.date.year == today.year &&
+      l.date.month == today.month &&
+      l.date.day == today.day
+    );
+    
+    if (hasYesterdayLog && hasTodayLog) {
+      // Continue streak
+      _streaks[type] = (_streaks[type] ?? 0) + 1;
+    } else if (!hasYesterdayLog && hasTodayLog) {
+      // Start new streak or reset
+      final typeLogs = _logs
+          .where((l) => l.type == type)
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+      
+      if (typeLogs.isNotEmpty) {
+        final lastLog = typeLogs.last;
+        final daysSinceLast = today.difference(
+          DateTime(lastLog.date.year, lastLog.date.month, lastLog.date.day)
+        ).inDays;
+        
+        if (daysSinceLast <= 1) {
+          // This is a continuation (today is after yesterday or same day)
+          _streaks[type] = (_streaks[type] ?? 0) + 1;
+        } else {
+          // Gap in streak, reset to 1
+          _streaks[type] = 1;
+        }
+      } else {
+        // First time logging this type
+        _streaks[type] = 1;
+      }
+    }
+    // If no today log, don't change streak
+    
+    await _storage.saveStreaks(_streaks);
+  }
+
+  // Recalculate all streaks from logs
+  Future<void> _recalculateStreaks() async {
+    final today = DateTime.now();
+    final newStreaks = <String, int>{};
+    
+    for (final type in ibadatTypes) {
+      // Get all logs for this type, sorted by date
+      final typeLogs = _logs
+          .where((log) => log.type == type)
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+      
+      if (typeLogs.isEmpty) {
+        newStreaks[type] = 0;
+        continue;
+      }
+      
+      // Count consecutive days
+      int streak = 0;
+      DateTime? lastDate;
+      
+      for (final log in typeLogs) {
+        final logDate = DateTime(log.date.year, log.date.month, log.date.day);
+        
+        if (lastDate == null) {
+          // First log
+          streak = 1;
+          lastDate = logDate;
+        } else {
+          final difference = logDate.difference(lastDate).inDays;
+          if (difference == 1) {
+            // Consecutive day
+            streak++;
+            lastDate = logDate;
+          } else if (difference > 1) {
+            // Gap in streak
+            streak = 1;
+            lastDate = logDate;
+          }
+          // If difference == 0, it's the same day, ignore
+        }
+      }
+      
+      // Check if the last streak is still active (logged today or yesterday)
+      if (lastDate != null) {
+        final daysSinceLast = today.difference(
+          DateTime(lastDate.year, lastDate.month, lastDate.day)
+        ).inDays;
+        if (daysSinceLast > 1) {
+          // Streak has expired
+          streak = 0;
+        }
+      }
+      
+      newStreaks[type] = streak;
+    }
+    
+    _streaks = newStreaks;
+    await _storage.saveStreaks(_streaks);
+  }
+
+  // Update total streak in user data
+  Future<void> _updateTotalStreak() async {
+    final totalStreak = _streaks.values.fold(0, (sum, value) => sum + value);
+    if (_userData != null) {
+      _userData!['streaks'] = totalStreak;
+      await _storage.saveUserData(_userData!);
+    }
   }
 
   double _calculatePoints(IbadatLog log) {

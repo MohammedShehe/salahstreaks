@@ -16,17 +16,38 @@ class ProfileWidget extends StatefulWidget {
 class _ProfileWidgetState extends State<ProfileWidget> {
   bool _showProfile = false;
   String? _profileImagePath;
+  TextEditingController _nameController = TextEditingController();
+  String _displayName = 'MO11';
 
   @override
   void initState() {
     super.initState();
     _loadProfileImage();
+    _loadUserName();
   }
 
   Future<void> _loadProfileImage() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _profileImagePath = prefs.getString('profile_image_path');
+    });
+  }
+
+  Future<void> _loadUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString('user_name') ?? 'MO11';
+    setState(() {
+      _displayName = name;
+      _nameController.text = name;
+    });
+  }
+
+  Future<void> _saveUserName(String newName) async {
+    if (newName.trim().isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_name', newName.trim());
+    setState(() {
+      _displayName = newName.trim();
     });
   }
 
@@ -58,6 +79,9 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   Widget build(BuildContext context) {
     final provider = Provider.of<AppProvider>(context);
     final totalPoints = provider.getTotalPoints();
+    
+    // Calculate total streak from all ibadat types
+    final totalStreak = provider.streaks.values.fold(0, (sum, value) => sum + value);
 
     return Stack(
       children: [
@@ -79,7 +103,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             ),
             child: Row(
               children: [
-                // Profile picture with app logo as default fallback
                 Container(
                   width: 50,
                   height: 50,
@@ -118,7 +141,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             height: 50,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
-                              // Fallback to person icon if image fails to load
                               return const Icon(
                                 Icons.person,
                                 color: Colors.white,
@@ -134,7 +156,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'MO11',
+                        _displayName,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -161,7 +183,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                     ],
                   ),
                 ),
-                // 🔥 Streak Counter
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -180,7 +201,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '${provider.userData?['streaks'] ?? 0}',
+                        '$totalStreak',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -303,15 +324,66 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          'MO11',
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                        
+                        // Name editing field
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _nameController,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Enter your name',
+                                  hintStyle: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 20,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: Colors.green[700]!,
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: Colors.green[700]!.withOpacity(0.3),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: Colors.green[400]!,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                onSubmitted: (value) => _saveUserName(value),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () => _saveUserName(_nameController.text),
+                              icon: const Icon(
+                                Icons.save_rounded,
+                                color: Colors.green,
+                                size: 28,
+                              ),
+                              tooltip: 'Save name',
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
+                        
+                        const SizedBox(height: 16),
+                        
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -324,8 +396,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                                 children: [
                                   _buildStatItem(
-                                    '🔥 ${provider.userData?['streaks'] ?? 0}',
-                                    'Streaks',
+                                    '🔥 $totalStreak',
+                                    'Total Streaks',
                                   ),
                                   _buildStatItem(
                                     '⭐ ${totalPoints.round()}',
