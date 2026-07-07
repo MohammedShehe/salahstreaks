@@ -28,9 +28,15 @@ class _LoggingWidgetState extends State<LoggingWidget> {
   String _sawmType = 'Fardh';
   int _tahajjudRakah = 2;
   int _witrRakah = 1;
+  
+  // Quran fields - now with mode selection
+  String _quranLogMode = 'Verses'; // 'Verses' or 'Pages'
   String _selectedSurah = 'Al-Fatihah';
   int _verseStart = 1;
   int _verseEnd = 1;
+  int _pageStart = 1;
+  int _pageEnd = 1;
+  
   String _sadaqatType = 'Money';
   final TextEditingController _noteController = TextEditingController();
   double _sadaqatAmount = 10.0;
@@ -213,7 +219,7 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     }
   }
 
-  // ============ SALAH FIELDS - Each prayer individually toggleable ============
+  // ============ SALAH FIELDS ============
   List<Widget> _buildSalahFields() {
     final prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
     final prayerTimes = ['5:00 AM', '1:00 PM', '4:30 PM', '6:45 PM', '8:00 PM'];
@@ -400,7 +406,7 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     }
   }
 
-  // ============ OTHER IBADAT TYPES (same as before) ============
+  // ============ SAWM FIELDS ============
   List<Widget> _buildSawmFields() {
     if (_isAlreadyLogged) {
       return [
@@ -457,6 +463,7 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     ];
   }
 
+  // ============ QIYYAM FIELDS ============
   List<Widget> _buildQiyyamFields() {
     if (_isAlreadyLogged) {
       return [
@@ -528,6 +535,7 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     ];
   }
 
+  // ============ QURAN FIELDS - UPDATED with Pages option ============
   List<Widget> _buildQuranFields() {
     if (_isAlreadyLogged) {
       return [
@@ -556,7 +564,67 @@ class _LoggingWidgetState extends State<LoggingWidget> {
       ];
     }
 
+    // Calculate current counts
+    final versesCount = _verseEnd - _verseStart + 1;
+    final pagesCount = _pageEnd - _pageStart + 1;
+    final isVersesMode = _quranLogMode == 'Verses';
+    final currentCount = isVersesMode ? versesCount : pagesCount;
+
     return [
+      // Mode selector
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.green[900]!.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green[700]!.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            const Text(
+              'Log by:',
+              style: TextStyle(color: Colors.white, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('📖 Verses'),
+                    selected: _quranLogMode == 'Verses',
+                    onSelected: (selected) {
+                      if (selected) setState(() => _quranLogMode = 'Verses');
+                    },
+                    selectedColor: Colors.green[700],
+                    backgroundColor: Colors.grey[800],
+                    labelStyle: TextStyle(
+                      color: _quranLogMode == 'Verses' ? Colors.white : Colors.grey[400],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('📄 Pages'),
+                    selected: _quranLogMode == 'Pages',
+                    onSelected: (selected) {
+                      if (selected) setState(() => _quranLogMode = 'Pages');
+                    },
+                    selectedColor: Colors.green[700],
+                    backgroundColor: Colors.grey[800],
+                    labelStyle: TextStyle(
+                      color: _quranLogMode == 'Pages' ? Colors.white : Colors.grey[400],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // Surah selection (common for both modes)
       DropdownButtonFormField<String>(
         value: _selectedSurah,
         decoration: InputDecoration(
@@ -582,61 +650,150 @@ class _LoggingWidgetState extends State<LoggingWidget> {
         onChanged: (value) => setState(() => _selectedSurah = value!),
       ),
       const SizedBox(height: 16),
-      Row(
-        children: [
-          Expanded(
-            child: TextField(
-              decoration: InputDecoration(
-                labelText: 'Start Verse',
-                labelStyle: const TextStyle(color: Colors.white),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.green[700]!),
+
+      // Verses mode fields
+      if (_quranLogMode == 'Verses') ...[
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: InputDecoration(
+                  labelText: 'Start Verse',
+                  labelStyle: const TextStyle(color: Colors.white),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[700]!.withOpacity(0.3)),
+                  ),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.green[700]!.withOpacity(0.3)),
-                ),
+                style: const TextStyle(color: Colors.white),
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  setState(() => _verseStart = int.tryParse(value) ?? 1);
+                },
               ),
-              style: const TextStyle(color: Colors.white),
-              keyboardType: TextInputType.number,
-              onChanged: (value) {
-                setState(() => _verseStart = int.tryParse(value) ?? 1);
-              },
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: TextField(
-              decoration: InputDecoration(
-                labelText: 'End Verse',
-                labelStyle: const TextStyle(color: Colors.white),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.green[700]!),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextField(
+                decoration: InputDecoration(
+                  labelText: 'End Verse',
+                  labelStyle: const TextStyle(color: Colors.white),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[700]!.withOpacity(0.3)),
+                  ),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.green[700]!.withOpacity(0.3)),
-                ),
+                style: const TextStyle(color: Colors.white),
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  setState(() => _verseEnd = int.tryParse(value) ?? 1);
+                },
               ),
-              style: const TextStyle(color: Colors.white),
-              keyboardType: TextInputType.number,
-              onChanged: (value) {
-                setState(() => _verseEnd = int.tryParse(value) ?? 1);
-              },
             ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Verses recited: $versesCount',
+          style: TextStyle(
+            color: versesCount > 0 ? Colors.green[300] : Colors.red[300],
+            fontWeight: FontWeight.bold,
           ),
-        ],
-      ),
-      const SizedBox(height: 8),
-      Text(
-        'Verses recited: ${_verseEnd - _verseStart + 1}',
-        style: TextStyle(color: Colors.green[300], fontWeight: FontWeight.bold),
-      ),
+        ),
+        if (versesCount == 0)
+          Text(
+            '⚠️ Please enter valid verse range',
+            style: TextStyle(color: Colors.red[300], fontSize: 12),
+          ),
+      ],
+
+      // Pages mode fields
+      if (_quranLogMode == 'Pages') ...[
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: InputDecoration(
+                  labelText: 'Start Page',
+                  labelStyle: const TextStyle(color: Colors.white),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[700]!.withOpacity(0.3)),
+                  ),
+                ),
+                style: const TextStyle(color: Colors.white),
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  setState(() => _pageStart = int.tryParse(value) ?? 1);
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextField(
+                decoration: InputDecoration(
+                  labelText: 'End Page',
+                  labelStyle: const TextStyle(color: Colors.white),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[700]!),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.green[700]!.withOpacity(0.3)),
+                  ),
+                ),
+                style: const TextStyle(color: Colors.white),
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  setState(() => _pageEnd = int.tryParse(value) ?? 1);
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Pages recited: $pagesCount',
+          style: TextStyle(
+            color: pagesCount > 0 ? Colors.green[300] : Colors.red[300],
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        if (pagesCount == 0)
+          Text(
+            '⚠️ Please enter valid page range',
+            style: TextStyle(color: Colors.red[300], fontSize: 12),
+          ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.green[900]!.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            '💡 1 Juz = 20 pages',
+            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+          ),
+        ),
+      ],
     ];
   }
 
+  // ============ SADAQAT FIELDS ============
   List<Widget> _buildSadaqatFields() {
     if (_isAlreadyLogged) {
       return [
@@ -742,6 +899,14 @@ class _LoggingWidgetState extends State<LoggingWidget> {
           ),
         ],
       ),
+      if (_sadaqatAmount <= 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            '⚠️ Please enter a valid amount',
+            style: TextStyle(color: Colors.red[300], fontSize: 12),
+          ),
+        ),
     ];
   }
 
@@ -831,7 +996,51 @@ class _LoggingWidgetState extends State<LoggingWidget> {
       return;
     }
     
-    int versesCount = _verseEnd - _verseStart + 1;
+    // Calculate verses count for Quran
+    int versesCount = 0;
+    if (widget.type == 'Quran') {
+      if (_quranLogMode == 'Verses') {
+        versesCount = _verseEnd - _verseStart + 1;
+        // Validate verses count
+        if (versesCount <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Please enter valid verse range (start < end)'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      } else {
+        // Pages mode
+        final pagesCount = _pageEnd - _pageStart + 1;
+        if (pagesCount <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Please enter valid page range (start < end)'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        // Convert pages to verses (1 page ≈ 20 verses)
+        versesCount = pagesCount * 20;
+      }
+    }
+    
+    // Validate Sadaqat amount
+    if (widget.type == 'Sadaqat' && _sadaqatAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Please enter a valid amount'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     
     final log = IbadatLog(
       type: widget.type,

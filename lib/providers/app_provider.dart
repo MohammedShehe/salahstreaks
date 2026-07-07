@@ -374,7 +374,19 @@ class AppProvider extends ChangeNotifier {
           break;
         case 'Quran':
           final verses = todayLogs.fold(0, (sum, log) => sum + log.versesCount);
-          percentages[type] = (verses / 140) * 100;
+          // Updated Quran percentage calculation
+          if (verses == 0) {
+            percentages[type] = 0.0;
+          } else {
+            // Find the appropriate denominator based on verses count
+            int denominator = 140;
+            int multiplier = 1;
+            while (verses > denominator * multiplier) {
+              multiplier++;
+            }
+            final maxVerses = denominator * multiplier;
+            percentages[type] = (verses / maxVerses) * 100;
+          }
           break;
         case 'Sadaqat':
           percentages[type] = todayLogs.isNotEmpty ? 100.0 : 0.0;
