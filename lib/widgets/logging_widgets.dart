@@ -42,7 +42,6 @@ class _LoggingWidgetState extends State<LoggingWidget> {
   double _sadaqatAmount = 10.0;
 
   bool _isAlreadyLogged = false;
-  int _currentSalahCount = 0;
 
   @override
   void initState() {
@@ -54,17 +53,15 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     final provider = Provider.of<AppProvider>(context, listen: false);
     
     if (widget.type == 'Salah') {
-      final count = provider.getTodaySalahCount();
-      _currentSalahCount = count;
+      final prayedSet = provider.getTodayPrayedSalah();
       
-      // Mark prayers that are already logged
       setState(() {
-        _salahTicked['Fajr'] = count >= 1;
-        _salahTicked['Dhuhr'] = count >= 2;
-        _salahTicked['Asr'] = count >= 3;
-        _salahTicked['Maghrib'] = count >= 4;
-        _salahTicked['Isha'] = count >= 5;
-        _isAlreadyLogged = count >= 5; // All 5 prayers done
+        _salahTicked['Fajr'] = prayedSet.contains('Fajr');
+        _salahTicked['Dhuhr'] = prayedSet.contains('Dhuhr');
+        _salahTicked['Asr'] = prayedSet.contains('Asr');
+        _salahTicked['Maghrib'] = prayedSet.contains('Maghrib');
+        _salahTicked['Isha'] = prayedSet.contains('Isha');
+        _isAlreadyLogged = prayedSet.length >= 5;
       });
     } else {
       setState(() {
@@ -219,7 +216,7 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     }
   }
 
-  // ============ SALAH FIELDS ============
+  // ============ SALAH FIELDS - UPDATED FOR INDEPENDENT TOGGLING ============
   List<Widget> _buildSalahFields() {
     final prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
     final prayerTimes = ['5:00 AM', '1:00 PM', '4:30 PM', '6:45 PM', '8:00 PM'];
@@ -317,16 +314,19 @@ class _LoggingWidgetState extends State<LoggingWidget> {
                     ),
                   ),
                   trailing: isLogged
-                      ? Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.green[700],
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check,
-                            color: Colors.white,
-                            size: 18,
+                      ? GestureDetector(
+                          onTap: () => _toggleSalah(prayer),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.red[700],
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 18,
+                            ),
                           ),
                         )
                       : ElevatedButton(
@@ -350,10 +350,37 @@ class _LoggingWidgetState extends State<LoggingWidget> {
                             ),
                           ),
                         ),
-                  onTap: isLogged ? null : () => _toggleSalah(prayer),
+                  onTap: () => _toggleSalah(prayer),
                 ),
               );
             }),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey[800]!.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.grey[400],
+                    size: 14,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Tap on any prayer to mark/unmark it independently',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -362,36 +389,35 @@ class _LoggingWidgetState extends State<LoggingWidget> {
 
   void _toggleSalah(String prayerName) async {
     final provider = Provider.of<AppProvider>(context, listen: false);
-    final isLogged = provider.isSalahLogged(prayerName);
     
-    // If already logged, don't do anything
-    if (isLogged) return;
-    
-    // Toggle the prayer
+    // Toggle the prayer (mark/unmark)
     await provider.toggleSalah(prayerName);
     
     // Update local state
-    final newCount = provider.getTodaySalahCount();
+    final prayedSet = provider.getTodayPrayedSalah();
     setState(() {
-      _salahTicked['Fajr'] = newCount >= 1;
-      _salahTicked['Dhuhr'] = newCount >= 2;
-      _salahTicked['Asr'] = newCount >= 3;
-      _salahTicked['Maghrib'] = newCount >= 4;
-      _salahTicked['Isha'] = newCount >= 5;
-      _isAlreadyLogged = newCount >= 5;
+      _salahTicked['Fajr'] = prayedSet.contains('Fajr');
+      _salahTicked['Dhuhr'] = prayedSet.contains('Dhuhr');
+      _salahTicked['Asr'] = prayedSet.contains('Asr');
+      _salahTicked['Maghrib'] = prayedSet.contains('Maghrib');
+      _salahTicked['Isha'] = prayedSet.contains('Isha');
+      _isAlreadyLogged = prayedSet.length >= 5;
     });
     
+    final isNowLogged = prayedSet.contains(prayerName);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('✅ $prayerName marked as prayed!'),
-        backgroundColor: Colors.green,
+        content: Text(
+          isNowLogged ? '✅ $prayerName marked as prayed!' : '❌ $prayerName unmarked',
+        ),
+        backgroundColor: isNowLogged ? Colors.green : Colors.orange,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
     );
     
     // Close if all 5 prayers are done
-    if (newCount >= 5) {
+    if (prayedSet.length >= 5) {
       Future.delayed(const Duration(seconds: 1), () {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -535,7 +561,7 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     ];
   }
 
-  // ============ QURAN FIELDS - UPDATED with Pages option ============
+  // ============ QURAN FIELDS ============
   List<Widget> _buildQuranFields() {
     if (_isAlreadyLogged) {
       return [
@@ -564,14 +590,11 @@ class _LoggingWidgetState extends State<LoggingWidget> {
       ];
     }
 
-    // Calculate current counts
     final versesCount = _verseEnd - _verseStart + 1;
     final pagesCount = _pageEnd - _pageStart + 1;
     final isVersesMode = _quranLogMode == 'Verses';
-    final currentCount = isVersesMode ? versesCount : pagesCount;
 
     return [
-      // Mode selector
       Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -624,7 +647,6 @@ class _LoggingWidgetState extends State<LoggingWidget> {
       ),
       const SizedBox(height: 16),
 
-      // Surah selection (common for both modes)
       DropdownButtonFormField<String>(
         value: _selectedSurah,
         decoration: InputDecoration(
@@ -651,7 +673,6 @@ class _LoggingWidgetState extends State<LoggingWidget> {
       ),
       const SizedBox(height: 16),
 
-      // Verses mode fields
       if (_quranLogMode == 'Verses') ...[
         Row(
           children: [
@@ -715,7 +736,6 @@ class _LoggingWidgetState extends State<LoggingWidget> {
           ),
       ],
 
-      // Pages mode fields
       if (_quranLogMode == 'Pages') ...[
         Row(
           children: [
@@ -936,7 +956,6 @@ class _LoggingWidgetState extends State<LoggingWidget> {
     
     // For Salah, we handle it differently
     if (widget.type == 'Salah') {
-      // Count how many are ticked
       int count = _salahTicked.values.where((v) => v).length;
       if (count == 0) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -949,14 +968,16 @@ class _LoggingWidgetState extends State<LoggingWidget> {
         return;
       }
       
-      // Check if any are already logged (should be handled by toggle)
-      final existingCount = provider.getTodaySalahCount();
-      if (count <= existingCount) {
-        Navigator.pop(context);
-        return;
-      }
+      // Check which prayers are ticked
+      final prayed = <String>[];
+      if (_salahTicked['Fajr']!) prayed.add('Fajr');
+      if (_salahTicked['Dhuhr']!) prayed.add('Dhuhr');
+      if (_salahTicked['Asr']!) prayed.add('Asr');
+      if (_salahTicked['Maghrib']!) prayed.add('Maghrib');
+      if (_salahTicked['Isha']!) prayed.add('Isha');
       
-      // Log the Salah with the count
+      final note = 'prayed:${prayed.join(',')}';
+      
       final log = IbadatLog(
         type: 'Salah',
         date: now,
@@ -966,7 +987,7 @@ class _LoggingWidgetState extends State<LoggingWidget> {
         versesCount: 0,
         surahName: '',
         sadaqatType: '',
-        note: '',
+        note: note,
         amount: 0.0,
       );
       
@@ -996,12 +1017,10 @@ class _LoggingWidgetState extends State<LoggingWidget> {
       return;
     }
     
-    // Calculate verses count for Quran
     int versesCount = 0;
     if (widget.type == 'Quran') {
       if (_quranLogMode == 'Verses') {
         versesCount = _verseEnd - _verseStart + 1;
-        // Validate verses count
         if (versesCount <= 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1013,7 +1032,6 @@ class _LoggingWidgetState extends State<LoggingWidget> {
           return;
         }
       } else {
-        // Pages mode
         final pagesCount = _pageEnd - _pageStart + 1;
         if (pagesCount <= 0) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1025,12 +1043,10 @@ class _LoggingWidgetState extends State<LoggingWidget> {
           );
           return;
         }
-        // Convert pages to verses (1 page ≈ 20 verses)
         versesCount = pagesCount * 20;
       }
     }
     
-    // Validate Sadaqat amount
     if (widget.type == 'Sadaqat' && _sadaqatAmount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

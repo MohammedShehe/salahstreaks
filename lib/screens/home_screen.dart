@@ -162,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 
                 const SizedBox(height: 20),
                 
-                // Salah Progress Bar
+                // Salah Progress Bar 
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -192,7 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           Text(
-                            '$salahCount/5',
+                            '${provider.getTodayPrayedSalah().length}/5',
                             style: TextStyle(
                               color: Colors.green[300],
                               fontSize: 14,
@@ -205,11 +205,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: LinearProgressIndicator(
-                          value: salahCount / 5,
+                          value: provider.getTodayPrayedSalah().length / 5,
                           minHeight: 8,
                           backgroundColor: Colors.grey[800],
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            salahCount >= 5 ? Colors.green : Colors.amber,
+                            provider.getTodayPrayedSalah().length >= 5 ? Colors.green : Colors.amber,
                           ),
                         ),
                       ),
@@ -217,11 +217,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _buildPrayerStatus('Fajr', salahCount >= 1),
-                          _buildPrayerStatus('Dhuhr', salahCount >= 2),
-                          _buildPrayerStatus('Asr', salahCount >= 3),
-                          _buildPrayerStatus('Maghrib', salahCount >= 4),
-                          _buildPrayerStatus('Isha', salahCount >= 5),
+                          _buildPrayerStatus('Fajr', provider.isSalahLogged('Fajr')),
+                          _buildPrayerStatus('Dhuhr', provider.isSalahLogged('Dhuhr')),
+                          _buildPrayerStatus('Asr', provider.isSalahLogged('Asr')),
+                          _buildPrayerStatus('Maghrib', provider.isSalahLogged('Maghrib')),
+                          _buildPrayerStatus('Isha', provider.isSalahLogged('Isha')),
                         ],
                       ),
                     ],

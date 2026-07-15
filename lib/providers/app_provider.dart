@@ -27,10 +27,8 @@ class AppProvider extends ChangeNotifier {
     _streaks = await _storage.loadStreaks();
     _points = await _storage.loadPoints();
     
-    // Recalculate streaks based on logs to ensure accuracy
     await _recalculateStreaks();
     
-    // Update total streak in user data
     final totalStreak = _streaks.values.fold(0, (sum, value) => sum + value);
     if (_userData != null) {
       _userData!['streaks'] = totalStreak;
@@ -40,7 +38,6 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Check if any ibadat type is already logged today
   bool isLoggedToday(String type) {
     final today = DateTime.now();
     return _logs.any((log) => 
@@ -51,7 +48,6 @@ class AppProvider extends ChangeNotifier {
     );
   }
 
-  // Get today's Salah log if exists
   IbadatLog? getTodaySalahLog() {
     final today = DateTime.now();
     try {
@@ -66,78 +62,96 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  // Get the current Salah count for today
   int getTodaySalahCount() {
     final log = getTodaySalahLog();
     return log?.salahCount ?? 0;
   }
 
-  // Check if a specific Salah is already logged for today
-  bool isSalahLogged(String prayerName) {
+  Set<String> getTodayPrayedSalah() {
     final log = getTodaySalahLog();
-    if (log == null) return false;
+    if (log == null) return {};
     
-    // Map prayer name to count
-    final prayerIndex = {
-      'Fajr': 1,
-      'Dhuhr': 2,
-      'Asr': 3,
-      'Maghrib': 4,
-      'Isha': 5,
-    };
+    final prayed = <String>{};
     
-    final index = prayerIndex[prayerName] ?? 0;
-    return log.salahCount >= index;
+    if (log.note.isNotEmpty && log.note.startsWith('prayed:')) {
+      final prayedList = log.note.replaceFirst('prayed:', '').split(',');
+      prayed.addAll(prayedList.where((p) => p.isNotEmpty));
+    } else {
+      final prayerNames = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+      final count = log.salahCount;
+      for (int i = 0; i < count && i < prayerNames.length; i++) {
+        prayed.add(prayerNames[i]);
+      }
+    }
+    
+    return prayed;
   }
 
-  // Get total streak across all ibadat types
+  bool isSalahLogged(String prayerName) {
+    final prayed = getTodayPrayedSalah();
+    return prayed.contains(prayerName);
+  }
+
   int getTotalStreak() {
     return _streaks.values.fold(0, (sum, value) => sum + value);
+  }
+
+  // Toggle a specific Salah prayer (mark/unmark)
+  Future<void> toggleSalah(String prayerName) async {
+    final today = DateTime.now();
+    final prayed = getTodayPrayedSalah();
+    
+    // Toggle the prayer
+    if (prayed.contains(prayerName)) {
+      prayed.remove(prayerName);
+    } else {
+      prayed.add(prayerName);
+    }
+    
+    // Update the log
+    final count = prayed.length;
+    final note = 'prayed:${prayed.join(',')}';
+    
+    final log = IbadatLog(
+      type: 'Salah',
+      date: today,
+      salahCount: count,
+      sawmType: '',
+      rakahCount: 0,
+      versesCount: 0,
+      surahName: '',
+      sadaqatType: '',
+      note: note,
+      amount: 0.0,
+    );
+    
+    // Remove existing log if any
+    _logs.removeWhere((l) => 
+      l.type == 'Salah' &&
+      l.date.year == today.year &&
+      l.date.month == today.month &&
+      l.date.day == today.day
+    );
+    
+    // Add the updated log
+    _logs.add(log);
+    await _storage.saveLogs(_logs);
+    
+    // Recalculate streaks instead of incrementing
+    await _recalculateStreaks();
+    await _updateTotalStreak();
+    
+    notifyListeners();
   }
 
   Future<void> logIbadat(IbadatLog log) async {
     final today = DateTime.now();
     final yesterday = today.subtract(const Duration(days: 1));
     
-    // If it's Salah, we need special handling
     if (log.type == 'Salah') {
-      final existingLog = getTodaySalahLog();
-      
-      if (existingLog != null) {
-        // Update existing log with new count (only if count is higher)
-        if (log.salahCount > existingLog.salahCount) {
-          final updatedLog = IbadatLog(
-            type: 'Salah',
-            date: today,
-            salahCount: log.salahCount,
-            sawmType: '',
-            rakahCount: 0,
-            versesCount: 0,
-            surahName: '',
-            sadaqatType: '',
-            note: '',
-            amount: 0.0,
-          );
-          
-          // Remove old log and add updated one
-          _logs.removeWhere((l) => 
-            l.type == 'Salah' &&
-            l.date.year == today.year &&
-            l.date.month == today.month &&
-            l.date.day == today.day
-          );
-          _logs.add(updatedLog);
-          await _storage.saveLogs(_logs);
-          
-          // Update streaks for Salah
-          await _updateStreak('Salah', today, yesterday);
-          await _updateTotalStreak();
-          notifyListeners();
-        }
-        return;
-      }
+      // Salah is handled by toggleSalah
+      return;
     } else {
-      // For non-Salah types, check if already logged today
       final alreadyLogged = _logs.any((l) => 
         l.type == log.type &&
         l.date.year == today.year &&
@@ -153,61 +167,18 @@ class AppProvider extends ChangeNotifier {
     _logs.add(log);
     await _storage.saveLogs(_logs);
     
-    // Update streaks for the specific type
     await _updateStreak(log.type, today, yesterday);
     
-    // Calculate points
     final points = _calculatePoints(log);
     _points[log.type] = (_points[log.type] ?? 0) + points;
     await _storage.savePoints(_points);
     
-    // Update total streak in user data
     await _updateTotalStreak();
     
     notifyListeners();
   }
 
-  // Toggle a specific Salah prayer
-  Future<void> toggleSalah(String prayerName) async {
-    final today = DateTime.now();
-    final currentCount = getTodaySalahCount();
-    
-    // Map prayer name to count
-    final prayerIndex = {
-      'Fajr': 1,
-      'Dhuhr': 2,
-      'Asr': 3,
-      'Maghrib': 4,
-      'Isha': 5,
-    };
-    
-    final index = prayerIndex[prayerName] ?? 0;
-    
-    // If already logged, don't do anything (can't unmark)
-    if (currentCount >= index) {
-      return;
-    }
-    
-    // Log the Salah with updated count
-    final log = IbadatLog(
-      type: 'Salah',
-      date: today,
-      salahCount: index,
-      sawmType: '',
-      rakahCount: 0,
-      versesCount: 0,
-      surahName: '',
-      sadaqatType: '',
-      note: '',
-      amount: 0.0,
-    );
-    
-    await logIbadat(log);
-  }
-
-  // Helper method to update streak for a specific type
   Future<void> _updateStreak(String type, DateTime today, DateTime yesterday) async {
-    // Check if there's a log for yesterday
     final hasYesterdayLog = _logs.any((l) => 
       l.type == type && 
       l.date.year == yesterday.year &&
@@ -215,7 +186,6 @@ class AppProvider extends ChangeNotifier {
       l.date.day == yesterday.day
     );
     
-    // Check if there's already a log for today
     final hasTodayLog = _logs.any((l) => 
       l.type == type && 
       l.date.year == today.year &&
@@ -224,10 +194,8 @@ class AppProvider extends ChangeNotifier {
     );
     
     if (hasYesterdayLog && hasTodayLog) {
-      // Continue streak
       _streaks[type] = (_streaks[type] ?? 0) + 1;
     } else if (!hasYesterdayLog && hasTodayLog) {
-      // Start new streak or reset
       final typeLogs = _logs
           .where((l) => l.type == type)
           .toList()
@@ -240,23 +208,18 @@ class AppProvider extends ChangeNotifier {
         ).inDays;
         
         if (daysSinceLast <= 1) {
-          // This is a continuation (today is after yesterday or same day)
           _streaks[type] = (_streaks[type] ?? 0) + 1;
         } else {
-          // Gap in streak, reset to 1
           _streaks[type] = 1;
         }
       } else {
-        // First time logging this type
         _streaks[type] = 1;
       }
     }
-    // If no today log, don't change streak
     
     await _storage.saveStreaks(_streaks);
   }
 
-  // Recalculate all streaks from logs
   Future<void> _recalculateStreaks() async {
     final today = DateTime.now();
     final newStreaks = <String, int>{};
@@ -317,7 +280,6 @@ class AppProvider extends ChangeNotifier {
     await _storage.saveStreaks(_streaks);
   }
 
-  // Update total streak in user data
   Future<void> _updateTotalStreak() async {
     final totalStreak = _streaks.values.fold(0, (sum, value) => sum + value);
     if (_userData != null) {
@@ -374,11 +336,9 @@ class AppProvider extends ChangeNotifier {
           break;
         case 'Quran':
           final verses = todayLogs.fold(0, (sum, log) => sum + log.versesCount);
-          // Updated Quran percentage calculation
           if (verses == 0) {
             percentages[type] = 0.0;
           } else {
-            // Find the appropriate denominator based on verses count
             int denominator = 140;
             int multiplier = 1;
             while (verses > denominator * multiplier) {
