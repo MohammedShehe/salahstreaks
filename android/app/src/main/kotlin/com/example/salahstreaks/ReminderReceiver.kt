@@ -1,4 +1,4 @@
-package com.example.salahstreaks
+package com.mohammedshehe.salahstreaks
 
 import android.app.Notification
 import android.app.NotificationChannel

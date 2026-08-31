@@ -1,4 +1,4 @@
-package com.example.salahstreaks
+package com.mohammedshehe.salahstreaks
 
 import android.app.AlarmManager
 import android.app.PendingIntent
