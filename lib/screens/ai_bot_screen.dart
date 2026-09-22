@@ -50,6 +50,135 @@ class _AiBotScreenState extends State<AiBotScreen> {
     });
   }
 
+  bool _needsMo11Support(String text) {
+    final q = text.toLowerCase();
+    const patterns = [
+      'who developed',
+      'who built',
+      'who created',
+      'who made you',
+      'who made this app',
+      'who developed this app',
+      'who built this app',
+      'who created this app',
+      'who is the developer',
+      'developer of the app',
+      'app developer',
+      'source code',
+      'programmer',
+      'developer information',
+      'technical support',
+      'technical assistance',
+      'further assistance',
+      'contact the developer',
+      'contact developer',
+      'report a bug',
+      'report an issue',
+      'app bug',
+      'app issue',
+      'technical issue',
+      'how was this app built',
+      'how was the app built',
+    ];
+    return patterns.any(q.contains);
+  }
+
+  String _mo11SupportMessage() =>
+      'MO11 developed and supports SalahStreaks.\n\n'
+      'For further assistance, technical support, or questions about the app, '
+      'please contact MO11 at +255 677 532 140.';
+
+  bool _looksLikeUnknownAnswer(String text) {
+    final q = text.toLowerCase().trim();
+    const phrases = [
+      'i don\'t know',
+      'i do not know',
+      'i\'m not sure',
+      'i am not sure',
+      'i cannot answer',
+      'i can\'t answer',
+      'i cannot reliably answer',
+      'i can\'t reliably answer',
+      'i don\'t have enough information',
+      'i do not have enough information',
+      'i\'m unable to answer',
+      'i am unable to answer',
+    ];
+    return phrases.any(q.contains);
+  }
+
+  String _formatAssistantText(String text) {
+    // AI providers sometimes ignore the no-table instruction. Convert any
+    // Markdown/pipe table into a phone-friendly list before displaying it.
+    final lines = text.replaceAll('\r\n', '\n').split('\n');
+    final output = <String>[];
+    var i = 0;
+    while (i < lines.length) {
+      final line = lines[i].trim();
+      final next = i + 1 < lines.length ? lines[i + 1].trim() : '';
+      final looksLikeTable = line.contains('|') &&
+          next.contains('|') &&
+          RegExp(r'^\|?\s*:?-{2,}').hasMatch(next);
+
+      if (looksLikeTable) {
+        final headers = _splitTableRow(line);
+        i += 2;
+        output.add('');
+        while (i < lines.length && lines[i].contains('|')) {
+          final cells = _splitTableRow(lines[i]);
+          if (cells.isNotEmpty) {
+            if (headers.isNotEmpty && cells.length == headers.length) {
+              for (var c = 0; c < cells.length; c++) {
+                final value = cells[c].trim();
+                if (value.isEmpty) continue;
+                output.add('• ${headers[c].trim()}: $value');
+              }
+            } else {
+              output.add('• ${cells.where((e) => e.trim().isNotEmpty).join(' — ')}');
+            }
+            output.add('');
+          }
+          i++;
+        }
+        continue;
+      }
+
+      // Remove accidental table separator rows even when the provider emits
+      // them without a clean header immediately before.
+      if (line.contains('|') &&
+          RegExp(r'^\|?\s*:?-{2,}(\s*\|\s*:?-{2,})+\s*\|?$')
+              .hasMatch(line)) {
+        i++;
+        continue;
+      }
+
+      // Also handle provider output that uses pipes without the Markdown
+      // separator row. Never expose raw table syntax to the user.
+      if (line.split('|').length >= 3) {
+        final cells = _splitTableRow(line)
+            .where((e) => e.trim().isNotEmpty)
+            .toList();
+        if (cells.isNotEmpty) {
+          output.add('• ${cells.join(' — ')}');
+          i++;
+          continue;
+        }
+      }
+
+      output.add(lines[i]);
+      i++;
+    }
+
+    return output.join('\n').replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+  }
+
+  List<String> _splitTableRow(String line) {
+    var value = line.trim();
+    if (value.startsWith('|')) value = value.substring(1);
+    if (value.endsWith('|')) value = value.substring(0, value.length - 1);
+    return value.split('|').map((e) => e.trim()).toList();
+  }
+
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _input.text).trim();
     if (text.isEmpty || _busy) return;
@@ -64,6 +193,18 @@ class _AiBotScreenState extends State<AiBotScreen> {
       if (preset == null) _input.clear();
     });
     _scrollToEnd();
+
+    if (_needsMo11Support(text)) {
+      setState(() {
+        _messages.add(AiBotMessage(
+          role: 'assistant',
+          content: _mo11SupportMessage(),
+        ));
+        _busy = false;
+      });
+      _scrollToEnd();
+      return;
+    }
 
     // Offline shortcuts — no key, no network required.
     if (text.toLowerCase().contains('daily verse') ||
@@ -128,8 +269,14 @@ class _AiBotScreenState extends State<AiBotScreen> {
       );
 
       if (!mounted) return;
+      final cleanReply = _formatAssistantText(reply);
       setState(() {
-        _messages.add(AiBotMessage(role: 'assistant', content: reply));
+        _messages.add(AiBotMessage(
+          role: 'assistant',
+          content: _looksLikeUnknownAnswer(cleanReply)
+              ? _mo11SupportMessage()
+              : cleanReply,
+        ));
         _busy = false;
       });
     } catch (e) {

@@ -1,7 +1,7 @@
 name: salahstreaks
 description: An Islamic Game mobile app for tracking daily ibadat with streaks
 publish_to: 'none'
-version: 1.0.3+4
+version: 1.0.4+5
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
