@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:salahstreaks/providers/app_provider.dart';
 import 'package:salahstreaks/utils/app_theme.dart';
+import 'package:salahstreaks/services/islamic_events_service.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
+import 'package:geolocator/geolocator.dart';
 
 class IslamicEvent {
   final String name;
@@ -20,17 +24,16 @@ class IslamicEvent {
     this.hijriDate = '',
   });
 
-  bool get hasPassed => DateTime.now().isAfter(date);
   bool get isToday {
     final now = DateTime.now();
-    return now.year == date.year && 
-           now.month == date.month && 
-           now.day == date.day;
+    return now.year == date.year && now.month == date.month && now.day == date.day;
   }
 
   String get daysUntil {
-    final now = DateTime.now();
-    final difference = date.difference(now).inDays;
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day);
+    final eventDay = DateTime(date.year, date.month, date.day);
+    final difference = eventDay.difference(start).inDays;
     if (difference == 0) return 'Today';
     if (difference == 1) return 'Tomorrow';
     if (difference < 0) return 'Passed';
@@ -50,6 +53,7 @@ class _EventsSliderState extends State<EventsSlider> {
   List<IslamicEvent> _events = [];
   int _currentPage = 0;
   Timer? _autoSlideTimer;
+  bool _loading = true;
 
   @override
   void initState() {
@@ -64,102 +68,49 @@ class _EventsSliderState extends State<EventsSlider> {
     super.dispose();
   }
 
-  void _loadEvents() {
-    _events = _getUpcomingEvents();
-    if (_events.isNotEmpty) {
-      _startAutoSlide();
-    }
-  }
+  Future<void> _loadEvents() async {
+    final settings = Provider.of<AppProvider>(context, listen: false).settings;
 
-  List<IslamicEvent> _getUpcomingEvents() {
-    // All dates are for 2026
-    final events = [
-      IslamicEvent(
-        name: 'Isra & Mi\'raj',
-        date: DateTime(2026, 1, 16),
-        description: 'Night journey of the Prophet ﷺ',
-        icon: '🕌',
-        isMajor: true,
-        hijriDate: '27 Rajab 1447',
-      ),
-      IslamicEvent(
-        name: 'Shab-e-Barat',
-        date: DateTime(2026, 2, 3),
-        description: 'Night of forgiveness',
-        icon: '🌙',
-        isMajor: true,
-        hijriDate: '15 Sha\'ban 1447',
-      ),
-      IslamicEvent(
-        name: 'Ramadan Start',
-        date: DateTime(2026, 2, 18),
-        description: 'First day of fasting',
-        icon: '🌙',
-        isMajor: true,
-        hijriDate: '1 Ramadan 1447',
-      ),
-      IslamicEvent(
-        name: 'Laylat al-Qadr',
-        date: DateTime(2026, 3, 16),
-        description: 'Night of Power - Better than 1000 months',
-        icon: '✨',
-        isMajor: true,
-        hijriDate: '27 Ramadan 1447',
-      ),
-      IslamicEvent(
-        name: 'Eid al-Fitr',
-        date: DateTime(2026, 3, 20),
-        description: 'Festival of Breaking the Fast',
-        icon: '🎉',
-        isMajor: true,
-        hijriDate: '1 Shawwal 1447',
-      ),
-      IslamicEvent(
-        name: 'Day of Arafah',
-        date: DateTime(2026, 5, 26),
-        description: 'Fasting recommended - expiates two years of sins',
-        icon: '🤲',
-        isMajor: true,
-        hijriDate: '9 Dhul Hijjah 1447',
-      ),
-      IslamicEvent(
-        name: 'Eid al-Adha',
-        date: DateTime(2026, 5, 27),
-        description: 'Festival of Sacrifice (3 days)',
-        icon: '🐑',
-        isMajor: true,
-        hijriDate: '10 Dhul Hijjah 1447',
-      ),
-      IslamicEvent(
-        name: 'Islamic New Year',
-        date: DateTime(2026, 6, 16),
-        description: 'Start of Hijri year 1448',
-        icon: '🌙',
-        isMajor: true,
-        hijriDate: '1 Muharram 1448',
-      ),
-      IslamicEvent(
-        name: 'Ashura',
-        date: DateTime(2026, 6, 25),
-        description: 'Fasting highly recommended',
-        icon: '🤲',
-        isMajor: true,
-        hijriDate: '10 Muharram 1448',
-      ),
-      IslamicEvent(
-        name: 'Mawlid al-Nabi',
-        date: DateTime(2026, 8, 25),
-        description: 'Birth of Prophet Muhammad ﷺ',
-        icon: '🕌',
-        isMajor: true,
-        hijriDate: '12 Rabi al-Awwal 1448',
-      ),
-    ];
+    // Use the live device location when permission has already been granted.
+    // We do not trigger a permission dialog from the Home screen.
+    double? latitude = settings.latitude;
+    double? longitude = settings.longitude;
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse) {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low,
+          timeLimit: Duration(seconds: 5),
+        );
+        latitude = position.latitude;
+        longitude = position.longitude;
+      }
+    } catch (_) {}
 
-    // Return only upcoming events (not passed), sorted by date
-    final upcomingEvents = events.where((event) => !event.hasPassed).toList();
-    upcomingEvents.sort((a, b) => a.date.compareTo(b.date));
-    return upcomingEvents;
+    final service = IslamicEventsService();
+    final data = await service.loadUpcoming(
+      latitude: latitude,
+      longitude: longitude,
+      calculationMethod: settings.calculationMethod,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _events = data
+          .map((event) => IslamicEvent(
+                name: event.name,
+                date: event.date,
+                description: event.description,
+                icon: event.icon,
+                isMajor: event.isMajor,
+                hijriDate: event.hijriDate,
+              ))
+          .toList();
+      _loading = false;
+    });
+
+    if (_events.isNotEmpty) _startAutoSlide();
   }
 
   void _startAutoSlide() {
@@ -178,6 +129,18 @@ class _EventsSliderState extends State<EventsSlider> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return Container(
+        height: 100,
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.grey[800]!.withOpacity(0.25),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+
     if (_events.isEmpty) {
       return Container(
         height: 100,
@@ -185,27 +148,15 @@ class _EventsSliderState extends State<EventsSlider> {
         decoration: BoxDecoration(
           color: Colors.grey[800]!.withOpacity(0.3),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.grey[700]!.withOpacity(0.3),
-          ),
+          border: Border.all(color: Colors.grey[700]!.withOpacity(0.3)),
         ),
         child: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.event_busy,
-                color: Colors.grey,
-                size: 32,
-              ),
+              Icon(Icons.event_busy, color: Colors.grey, size: 32),
               SizedBox(height: 8),
-              Text(
-                'No upcoming events',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 14,
-                ),
-              ),
+              Text('No upcoming events', style: TextStyle(color: Colors.grey, fontSize: 14)),
             ],
           ),
         ),
@@ -236,15 +187,8 @@ class _EventsSliderState extends State<EventsSlider> {
           PageView.builder(
             controller: _pageController,
             itemCount: _events.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
-            },
-            itemBuilder: (context, index) {
-              final event = _events[index];
-              return _buildEventCard(event);
-            },
+            onPageChanged: (index) => setState(() => _currentPage = index),
+            itemBuilder: (context, index) => _buildEventCard(_events[index]),
           ),
           Positioned(
             bottom: 8,
@@ -282,12 +226,7 @@ class _EventsSliderState extends State<EventsSlider> {
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Center(
-              child: Text(
-                event.icon,
-                style: TextStyle(fontSize: 30),
-              ),
-            ),
+            child: Center(child: Text(event.icon, style: const TextStyle(fontSize: 30))),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -309,19 +248,14 @@ class _EventsSliderState extends State<EventsSlider> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
                         color: event.isToday
                             ? Colors.amber.withOpacity(0.3)
                             : Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: event.isToday
-                              ? Colors.amber
-                              : Colors.white.withOpacity(0.2),
+                          color: event.isToday ? Colors.amber : Colors.white.withOpacity(0.2),
                         ),
                       ),
                       child: Text(
@@ -355,15 +289,9 @@ class _EventsSliderState extends State<EventsSlider> {
                         fontSize: 10,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const Spacer(),
                     if (event.isMajor)
-                      Text(
-                        '⭐',
-                        style: TextStyle(
-                          color: Colors.amber.withOpacity(0.7),
-                          fontSize: 12,
-                        ),
-                      ),
+                      Text('⭐', style: TextStyle(color: Colors.amber.withOpacity(0.7), fontSize: 12)),
                   ],
                 ),
               ],

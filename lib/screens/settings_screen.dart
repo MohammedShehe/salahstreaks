@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
 import 'dart:io';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -27,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _aiBaseUrlController;
   late TextEditingController _aiModelController;
   bool _showAiKey = false;
+  String _appVersion = 'Loading…';
 
   @override
   void initState() {
@@ -36,6 +38,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _aiKeyController = TextEditingController(text: _settings.aiApiKey);
     _aiBaseUrlController = TextEditingController(text: _settings.aiBaseUrl);
     _aiModelController = TextEditingController(text: _settings.aiModel);
+    _loadAppVersion();
+  }
+
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() {
+        _appVersion = 'Version ${info.version} (${info.buildNumber})';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _appVersion = 'Version unavailable');
+    }
   }
 
   @override
@@ -574,7 +591,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ListTile(
                             leading: const Icon(Icons.info, color: Colors.green),
                             title: Text(
-                              'Version 1.0.2',
+                              _appVersion,
                               style: TextStyle(color: AppThemeColors.textPrimary(context)),
                             ),
                             subtitle: Text(

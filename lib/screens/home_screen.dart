@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart' as flutter;
 import 'package:salahstreaks/utils/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'package:salahstreaks/providers/app_provider.dart';
@@ -15,6 +16,7 @@ import 'package:salahstreaks/screens/achievements_screen.dart';
 import 'package:salahstreaks/screens/prayer_times_screen.dart';
 import 'package:salahstreaks/screens/settings_screen.dart';
 import 'package:salahstreaks/screens/ai_bot_screen.dart';
+import 'package:salahstreaks/services/daily_verse_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,6 +28,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _currentVerse = '';
   String _currentTranslation = '';
+  String _currentTafsir = '';
+  String _currentVerseReference = '';
+  String _currentVerseSource = '';
+  String? _currentAiReflection;
+  bool _isVerseLoading = true;
   bool _copied = false;
 
   @override
@@ -45,14 +52,26 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _loadDailyVerse() {
-    final today = DateTime.now();
-    final dayOfYear = today.difference(DateTime(today.year, 1, 1)).inDays;
-    final index = dayOfYear % quranVerses.length;
-    setState(() {
-      _currentVerse = quranVerses[index]['verse']!;
-      _currentTranslation = quranVerses[index]['translation']!;
-    });
+  Future<void> _loadDailyVerse() async {
+    try {
+      final provider = Provider.of<AppProvider>(context, listen: false);
+      final verse = await DailyVerseService().loadForToday(
+        settings: provider.settings,
+      );
+      if (!mounted) return;
+      setState(() {
+        _currentVerse = verse.arabic;
+        _currentTranslation = verse.translation;
+        _currentTafsir = verse.tafsir;
+        _currentVerseReference = verse.reference;
+        _currentVerseSource = verse.source;
+        _currentAiReflection = verse.aiReflection;
+        _isVerseLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isVerseLoading = false);
+    }
   }
 
   void _copyVerse() {
@@ -322,25 +341,132 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      SelectableText(
-                        _currentVerse,
-                        style: TextStyle(
-                          fontSize: 20,
-                          color: Color(0xFFC8E6C9),
-                          fontFamily: 'Arabic',
-                          height: 1.8,
-                        ),
-                        textAlign: TextAlign.right,
+                      Row(
+                        children: [
+                          const Text(
+                            '📖 Daily Verse',
+                            style: TextStyle(
+                              color: Color(0xFFC8E6C9),
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_currentVerseReference.isNotEmpty)
+                            Text(
+                              _currentVerseReference,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.55),
+                                fontSize: 11,
+                              ),
+                            ),
+                        ],
                       ),
-                      const Divider(color: Colors.green, height: 20),
-                      Text(
-                        _currentTranslation,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[300],
-                          height: 1.5,
+                      const SizedBox(height: 12),
+                      if (_isVerseLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      else ...[
+                        SelectableText(
+                          _currentVerse,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            color: Color(0xFFC8E6C9),
+                            fontFamily: 'Arabic',
+                            height: 1.8,
+                          ),
+                          textAlign: TextAlign.right,
                         ),
-                      ),
+                        const Divider(color: Colors.green, height: 20),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _currentTranslation,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[300],
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.14),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: Colors.green.withOpacity(0.25),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Tafsir • Tafsir al-Muyassar',
+                                  style: TextStyle(
+                                    color: Color(0xFFA5D6A7),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 7),
+                                Text(
+                                  _currentTafsir,
+                                  style: TextStyle(
+                                    color: Colors.grey[300],
+                                    fontSize: 13,
+                                    height: 1.5,
+                                  ),
+                                  textDirection: flutter.TextDirection.rtl,
+                                ),
+                                if ((_currentAiReflection ?? '').trim().isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  const Divider(height: 1),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    'AI Reflection',
+                                    style: TextStyle(
+                                      color: Colors.amber,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    _currentAiReflection!,
+                                    style: TextStyle(
+                                      color: Colors.grey[300],
+                                      fontSize: 13,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (_currentVerseSource.isNotEmpty) ...[
+                          const SizedBox(height: 7),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Source: $_currentVerseSource',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.38),
+                                fontSize: 9,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                       const SizedBox(height: 10),
                       InkWell(
                         onTap: _copyVerse,
