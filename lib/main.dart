@@ -8,6 +8,7 @@ import 'package:salahstreaks/screens/graphs_screen.dart';
 import 'package:salahstreaks/screens/history_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:salahstreaks/services/reminder_service.dart';
+import 'package:salahstreaks/services/storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,15 +18,16 @@ void main() async {
   // StorageService. If you ever need to run this on web/desktop, you'd
   // initialize sqflite_common_ffi (or _ffi_web) here instead.
 
-  // Initialize reminder service
+  // Local device notifications only — no backend/Firebase is required.
+  // Load the saved switches before scheduling so disabled reminders never get
+  // recreated during app startup.
   final reminderService = ReminderService();
   await reminderService.initialize();
-
-  // Try to schedule native reminders
+  final savedSettings = await StorageService().loadSettings();
   try {
-    await reminderService.scheduleAllReminders();
+    await reminderService.ensureInitialPermissionsAndSchedule(savedSettings);
   } catch (e) {
-    print('Using in-app reminders only');
+    debugPrint('Could not schedule local reminders: $e');
   }
 
   runApp(

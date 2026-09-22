@@ -2,6 +2,7 @@ class UserSettings {
   bool darkMode;
   bool notificationsEnabled;
   bool prayerReminders;
+  bool quranReminders;
   bool adhkarReminders;
   String? city;
   double? latitude;
@@ -24,6 +25,7 @@ class UserSettings {
     this.darkMode = true,
     this.notificationsEnabled = true,
     this.prayerReminders = true,
+    this.quranReminders = true,
     this.adhkarReminders = true,
     this.city,
     this.latitude,
@@ -45,6 +47,7 @@ class UserSettings {
         'darkMode': darkMode,
         'notificationsEnabled': notificationsEnabled,
         'prayerReminders': prayerReminders,
+        'quranReminders': quranReminders,
         'adhkarReminders': adhkarReminders,
         'city': city,
         'latitude': latitude,
@@ -66,6 +69,7 @@ class UserSettings {
         darkMode: json['darkMode'] ?? true,
         notificationsEnabled: json['notificationsEnabled'] ?? true,
         prayerReminders: json['prayerReminders'] ?? true,
+        quranReminders: json['quranReminders'] ?? true,
         adhkarReminders: json['adhkarReminders'] ?? true,
         city: json['city'],
         latitude: json['latitude'],

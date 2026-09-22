@@ -2,4 +2,5 @@
 <resources>
     <!-- Same base color as Flutter SplashScreen (0xFF0A0E1A) -->
     <color name="splash_background">#0A0E1A</color>
+    <color name="icon_background">#0A0E1A</color>
 </resources>

@@ -34,8 +34,8 @@ android {
         applicationId = "com.mohammedshehe.salahstreaks"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = 3        // <-- bump this each release
+        versionName = "1.0.2"  // <-- human-readable version
     }
 
     signingConfigs {

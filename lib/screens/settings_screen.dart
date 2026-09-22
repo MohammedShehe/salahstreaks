@@ -5,6 +5,7 @@ import 'package:salahstreaks/providers/app_provider.dart';
 import 'package:salahstreaks/models/user_settings_model.dart';
 import 'package:salahstreaks/utils/constants.dart';
 import 'package:salahstreaks/services/ai_bot_service.dart';
+import 'package:salahstreaks/services/reminder_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
@@ -176,6 +177,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onChanged: (value) {
                               setState(() {
                                 _settings.prayerReminders = value;
+                                _saveSettings();
+                              });
+                            },
+                          ),
+                          _buildSwitchTile(
+                            title: 'Quran Verse Reminders',
+                            value: _settings.quranReminders,
+                            onChanged: (value) {
+                              setState(() {
+                                _settings.quranReminders = value;
                                 _saveSettings();
                               });
                             },
@@ -563,7 +574,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ListTile(
                             leading: const Icon(Icons.info, color: Colors.green),
                             title: Text(
-                              'Version 1.0.0',
+                              'Version 1.0.2',
                               style: TextStyle(color: AppThemeColors.textPrimary(context)),
                             ),
                             subtitle: Text(
@@ -676,6 +687,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveSettings() async {
     final provider = Provider.of<AppProvider>(context, listen: false);
     await provider.updateSettings(_settings);
+
+    // Keep OS-level schedules in sync immediately whenever any notification
+    // switch, sound, or vibration preference changes.
+    final granted = await ReminderService().applySettings(_settings);
+    if (!granted && mounted && _settings.notificationsEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Notifications are blocked by the device. Enable permission in system settings to receive reminders.',
+          ),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _exportBackup() async {

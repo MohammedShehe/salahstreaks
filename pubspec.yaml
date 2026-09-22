@@ -25,6 +25,7 @@ dependencies:
   sqflite: ^2.3.0
   path: ^1.8.3
   flutter_local_notifications: ^17.2.4
+  timezone: ^0.9.4
   adhan_dart: ^2.0.1
   geolocator: ^10.1.0
   geocoding: ^2.1.1
