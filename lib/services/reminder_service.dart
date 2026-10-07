@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:adhan_dart/adhan_dart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:salahstreaks/models/user_settings_model.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -12,6 +14,10 @@ import 'package:timezone/timezone.dart' as tz;
 ///
 /// No Firebase, push server, cron server, or backend is required. Android and
 /// iOS persist the schedules through their native notification/alarm systems.
+///
+/// Prayer reminders use real location-based times (adhan_dart + saved
+/// coordinates / city) when available. Hardcoded defaults are used only as a
+/// fallback when no usable location can be resolved.
 class ReminderService {
   ReminderService._internal();
 
@@ -33,8 +39,8 @@ class ReminderService {
   bool _isInitialized = false;
   UserSettings? _activeSettings;
 
-  // Salah times (24-hour format). These are the existing app defaults.
-  final Map<String, Map<String, int>> salahTimes = {
+  /// Hardcoded fallback times (24-hour). Used when location is unavailable.
+  static const Map<String, Map<String, int>> _fallbackSalahTimes = {
     'Fajr': {'hour': 5, 'minute': 0},
     'Dhuhr': {'hour': 13, 'minute': 30},
     'Asr': {'hour': 17, 'minute': 0},
@@ -42,6 +48,21 @@ class ReminderService {
     'Isha': {'hour': 21, 'minute': 0},
     'Qiyyam Layl': {'hour': 1, 'minute': 30},
   };
+
+  /// Active times used for scheduling and in-app checks.
+  /// Starts as the hardcoded defaults; replaced by calculated times when
+  /// location + calculation succeed.
+  Map<String, Map<String, int>> _activeSalahTimes =
+      Map<String, Map<String, int>>.from(_fallbackSalahTimes);
+
+  /// True when the last successful resolve used real coordinates.
+  bool _usingLocationBasedTimes = false;
+
+  /// Public read-only view of the times currently in use.
+  Map<String, Map<String, int>> get salahTimes =>
+      Map<String, Map<String, int>>.unmodifiable(_activeSalahTimes);
+
+  bool get usingLocationBasedTimes => _usingLocationBasedTimes;
 
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -80,7 +101,8 @@ class ReminderService {
 
   Future<void> _setDeviceTimeZone() async {
     try {
-      final zoneName = await _platformChannel.invokeMethod<String>('getTimeZoneName');
+      final zoneName =
+          await _platformChannel.invokeMethod<String>('getTimeZoneName');
       if (zoneName != null && zoneName.isNotEmpty) {
         tz.setLocalLocation(tz.getLocation(zoneName));
         return;
@@ -97,7 +119,8 @@ class ReminderService {
 
   /// Requests notification/exact-alarm access once when the app first needs
   /// reminders. Subsequent launches reuse the existing OS permission state.
-  Future<void> ensureInitialPermissionsAndSchedule(UserSettings settings) async {
+  Future<void> ensureInitialPermissionsAndSchedule(
+      UserSettings settings) async {
     await initialize();
     if (!settings.notificationsEnabled) {
       await _notifications.cancelAll();
@@ -105,7 +128,8 @@ class ReminderService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    final askedBefore = prefs.getBool('notification_permissions_requested') ?? false;
+    final askedBefore =
+        prefs.getBool('notification_permissions_requested') ?? false;
 
     if (!askedBefore) {
       final granted = await applySettings(settings, requestPermission: true);
@@ -213,14 +237,176 @@ class ReminderService {
     return true;
   }
 
+  // ============ LOCATION-BASED PRAYER TIMES ============
+
+  CalculationParameters _calculationParamsFromSettings(UserSettings settings) {
+    late final CalculationParameters params;
+    try {
+      switch (settings.calculationMethod) {
+        case 0:
+          params = CalculationMethodParameters.muslimWorldLeague();
+          break;
+        case 1:
+          params = CalculationMethodParameters.northAmerica();
+          break;
+        case 2:
+          params = CalculationMethodParameters.egyptian();
+          break;
+        case 3:
+          params = CalculationMethodParameters.ummAlQura();
+          break;
+        case 4:
+          params = CalculationMethodParameters.karachi();
+          break;
+        case 5:
+          params = CalculationMethodParameters.tehran();
+          break;
+        default:
+          params = CalculationMethodParameters.muslimWorldLeague();
+      }
+    } catch (_) {
+      params = CalculationMethodParameters.egyptian();
+    }
+
+    try {
+      params.madhab = settings.madhab == 1 ? Madhab.hanafi : Madhab.shafi;
+    } catch (_) {
+      // Ignore if the Madhab API differs; Asr uses the package default.
+    }
+
+    return params;
+  }
+
+  /// Resolves coordinates from saved settings only (no live GPS request).
+  /// Order: saved lat/long → geocode city name → null (caller uses fallback).
+  Future<Coordinates?> _resolveCoordinates(UserSettings settings) async {
+    if (settings.latitude != null && settings.longitude != null) {
+      return Coordinates(settings.latitude!, settings.longitude!);
+    }
+
+    final city = (settings.city ?? '').trim();
+    if (city.isNotEmpty) {
+      try {
+        final locations = await geocoding.locationFromAddress(city);
+        if (locations.isNotEmpty) {
+          return Coordinates(
+            locations.first.latitude,
+            locations.first.longitude,
+          );
+        }
+      } catch (e) {
+        debugPrint('Could not geocode city "$city" for reminders: $e');
+      }
+    }
+
+    return null;
+  }
+
+  /// Builds the prayer-time map for today.
+  /// Returns location-based times when coordinates are available; otherwise
+  /// returns a copy of the hardcoded fallback map.
+  Future<Map<String, Map<String, int>>> _resolveSalahTimes(
+      UserSettings settings) async {
+    final coords = await _resolveCoordinates(settings);
+    if (coords == null) {
+      _usingLocationBasedTimes = false;
+      return Map<String, Map<String, int>>.from(_fallbackSalahTimes);
+    }
+
+    try {
+      final params = _calculationParamsFromSettings(settings);
+      final nowLocal = DateTime.now();
+      final dateForCalc =
+          DateTime(nowLocal.year, nowLocal.month, nowLocal.day);
+
+      final times = PrayerTimes(
+        coordinates: coords,
+        date: dateForCalc,
+        calculationParameters: params,
+      );
+
+      DateTime? toLocal(DateTime? t) {
+        if (t == null) return null;
+        return t.isUtc ? t.toLocal() : t;
+      }
+
+      final fajr = toLocal(times.fajr);
+      final dhuhr = toLocal(times.dhuhr);
+      final asr = toLocal(times.asr);
+      final maghrib = toLocal(times.maghrib);
+      final isha = toLocal(times.isha);
+
+      if (fajr == null ||
+          dhuhr == null ||
+          asr == null ||
+          maghrib == null ||
+          isha == null) {
+        _usingLocationBasedTimes = false;
+        return Map<String, Map<String, int>>.from(_fallbackSalahTimes);
+      }
+
+      // Qiyyam Layl is not part of the standard five prayers. Approximate as
+      // the midpoint between Isha and next Fajr when both are known; otherwise
+      // keep the hardcoded default.
+      final qiyyam = _approximateQiyyam(isha, fajr);
+
+      _usingLocationBasedTimes = true;
+      return {
+        'Fajr': {'hour': fajr.hour, 'minute': fajr.minute},
+        'Dhuhr': {'hour': dhuhr.hour, 'minute': dhuhr.minute},
+        'Asr': {'hour': asr.hour, 'minute': asr.minute},
+        'Maghrib': {'hour': maghrib.hour, 'minute': maghrib.minute},
+        'Isha': {'hour': isha.hour, 'minute': isha.minute},
+        'Qiyyam Layl': {
+          'hour': qiyyam['hour']!,
+          'minute': qiyyam['minute']!,
+        },
+      };
+    } catch (e) {
+      debugPrint('Prayer-time calculation failed; using hardcoded fallback: $e');
+      _usingLocationBasedTimes = false;
+      return Map<String, Map<String, int>>.from(_fallbackSalahTimes);
+    }
+  }
+
+  /// Midpoint of the night between Isha and Fajr (last third is ideal, but
+  /// midpoint is a practical single alarm). Falls back to hardcoded 01:30.
+  Map<String, int> _approximateQiyyam(DateTime isha, DateTime fajr) {
+    try {
+      // Fajr is "tomorrow" relative to Isha on the same calendar day.
+      var fajrNext = fajr;
+      if (!fajrNext.isAfter(isha)) {
+        fajrNext = fajrNext.add(const Duration(days: 1));
+      }
+      final mid = isha.add(
+        Duration(
+          milliseconds:
+              fajrNext.difference(isha).inMilliseconds ~/ 2,
+        ),
+      );
+      return {'hour': mid.hour, 'minute': mid.minute};
+    } catch (_) {
+      return Map<String, int>.from(_fallbackSalahTimes['Qiyyam Layl']!);
+    }
+  }
+
   Future<void> scheduleAllReminders(UserSettings settings) async {
     if (!settings.notificationsEnabled) return;
+
+    // Resolve real (or fallback) prayer times before scheduling.
+    _activeSalahTimes = await _resolveSalahTimes(settings);
+    debugPrint(
+      'Prayer reminders: '
+      '${_usingLocationBasedTimes ? "location-based" : "hardcoded fallback"} '
+      '→ $_activeSalahTimes',
+    );
 
     if (settings.quranReminders) {
       await _scheduleNotification(
         id: _quranReminderId,
         title: '📖 Daily Quran Verse',
-        body: 'Your daily Quran reminder is ready — take a moment to read and reflect.',
+        body:
+            'Your daily Quran reminder is ready — take a moment to read and reflect.',
         hour: 6,
         minute: 0,
         settings: settings,
@@ -229,7 +415,7 @@ class ReminderService {
 
     if (settings.prayerReminders) {
       var id = 1;
-      for (final entry in salahTimes.entries) {
+      for (final entry in _activeSalahTimes.entries) {
         await _scheduleNotification(
           id: id,
           title: '🕌 ${entry.key} Time',
@@ -361,14 +547,15 @@ class ReminderService {
       if (!_shownReminders.contains(key)) {
         dueReminders.add({
           'title': '📖 Daily Quran Verse',
-          'body': 'Your daily Quran reminder is ready — take a moment to read and reflect.',
+          'body':
+              'Your daily Quran reminder is ready — take a moment to read and reflect.',
           'key': key,
         });
       }
     }
 
     if (settings.prayerReminders) {
-      for (final entry in salahTimes.entries) {
+      for (final entry in _activeSalahTimes.entries) {
         final hour = entry.value['hour']!;
         final minute = entry.value['minute']!;
         final reminderMinute = hour * 60 + minute;

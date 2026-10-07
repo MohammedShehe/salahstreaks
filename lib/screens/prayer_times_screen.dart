@@ -3,6 +3,7 @@ import 'package:salahstreaks/utils/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'package:salahstreaks/providers/app_provider.dart';
 import 'package:salahstreaks/models/user_settings_model.dart';
+import 'package:salahstreaks/services/reminder_service.dart';
 import 'package:adhan_dart/adhan_dart.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
@@ -143,6 +144,8 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
         settings.longitude = coords.longitude;
         settings.city = cityName;
         await provider.updateSettings(settings);
+        // Rebuild prayer-reminder schedules with the newly saved coordinates.
+        await ReminderService().applySettings(settings, requestPermission: false);
       }
     } on _LocationServicesDisabledException {
       setState(() => _status = _LoadStatus.servicesDisabled);
@@ -179,6 +182,8 @@ class _PrayerTimesScreenState extends State<PrayerTimesScreen> {
           settings.latitude = coords.latitude;
           settings.longitude = coords.longitude;
           await provider.updateSettings(settings);
+          // Rebuild prayer-reminder schedules with the newly saved coordinates.
+          await ReminderService().applySettings(settings, requestPermission: false);
         }
       } catch (_) {
         // Couldn't geocode the typed city -- fall through to Makkah below,
