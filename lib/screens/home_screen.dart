@@ -128,84 +128,43 @@ class _HomeScreenState extends State<HomeScreen> {
             color: Colors.green,
             backgroundColor: AppThemeColors.surface(context),
             onRefresh: _onRefresh,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                // Profile and Quick Actions Row
-                Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Keep a readable min content width; allow horizontal scroll
+                // if the browser window (or device frame) is extremely narrow.
+                final minContentWidth = 360.0;
+                final contentWidth = constraints.maxWidth < minContentWidth
+                    ? minContentWidth
+                    : constraints.maxWidth;
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: contentWidth,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                // Profile + quick actions ALWAYS stacked so ProfileWidget
+                // never shares a Row with icon buttons (that crushed it to ~20px on web).
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: ProfileWidget()
-                          .animate()
-                          .fadeIn(duration: 600.ms)
-                          .slideX(begin: -0.3),
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AiBotScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.smart_toy_outlined, color: Colors.tealAccent),
-                          tooltip: 'AI Bot',
+                    ProfileWidget()
+                        .animate()
+                        .fadeIn(duration: 600.ms),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        reverse: true,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _buildQuickActions(context),
                         ),
-                        IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AdhkarScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.menu_book_rounded, color: Colors.green),
-                          tooltip: 'Adhkar',
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AchievementsScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.emoji_events, color: Colors.amber),
-                          tooltip: 'Achievements',
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const PrayerTimesScreen(),
-                              ),
-                            );
-                          },
-                          icon: Icon(Icons.mosque, color: AppThemeColors.icon(context)),
-                          tooltip: 'Prayer Times',
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const SettingsScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.settings, color: Colors.grey),
-                          tooltip: 'Settings',
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
@@ -225,29 +184,35 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            dateFormat.format(now),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppThemeColors.textPrimary(context),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              dateFormat.format(now),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppThemeColors.textPrimary(context),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            timeFormat.format(now),
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppThemeColors.textSecondary(context),
+                            const SizedBox(height: 4),
+                            Text(
+                              timeFormat.format(now),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: AppThemeColors.textSecondary(context),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
@@ -282,16 +247,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            '🕌 Today\'s Salah',
-                            style: TextStyle(
-                              color: AppThemeColors.textPrimary(context),
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: Text(
+                              '🕌 Today\'s Salah',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppThemeColors.textPrimary(context),
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Text(
                             '${provider.getTodayPrayedSalah().length}/5',
                             style: TextStyle(
@@ -315,15 +284,30 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildPrayerStatus('Fajr', provider.isSalahLogged('Fajr')),
-                          _buildPrayerStatus('Dhuhr', provider.isSalahLogged('Dhuhr')),
-                          _buildPrayerStatus('Asr', provider.isSalahLogged('Asr')),
-                          _buildPrayerStatus('Maghrib', provider.isSalahLogged('Maghrib')),
-                          _buildPrayerStatus('Isha', provider.isSalahLogged('Isha')),
-                        ],
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final statuses = [
+                            _buildPrayerStatus('Fajr', provider.isSalahLogged('Fajr')),
+                            _buildPrayerStatus('Dhuhr', provider.isSalahLogged('Dhuhr')),
+                            _buildPrayerStatus('Asr', provider.isSalahLogged('Asr')),
+                            _buildPrayerStatus('Maghrib', provider.isSalahLogged('Maghrib')),
+                            _buildPrayerStatus('Isha', provider.isSalahLogged('Isha')),
+                          ];
+                          if (constraints.maxWidth < 340) {
+                            return Wrap(
+                              alignment: WrapAlignment.spaceEvenly,
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: statuses,
+                            );
+                          }
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: statuses
+                                .map((w) => Expanded(child: w))
+                                .toList(),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -358,23 +342,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Row(
                         children: [
-                          const Text(
-                            '📖 Daily Verse',
-                            style: TextStyle(
-                              color: Color(0xFFC8E6C9),
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (_currentVerseReference.isNotEmpty)
-                            Text(
-                              _currentVerseReference,
+                          const Flexible(
+                            child: Text(
+                              '📖 Daily Verse',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.55),
-                                fontSize: 11,
+                                color: Color(0xFFC8E6C9),
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
+                          ),
+                          if (_currentVerseReference.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                _currentVerseReference,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.55),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -537,7 +531,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    EventsSlider(),
+                    const SizedBox(
+                      width: double.infinity,
+                      child: EventsSlider(),
+                    ),
                   ],
                 ).animate().fadeIn(delay: 500.ms),
                 
@@ -636,8 +633,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ).animate().fadeIn(delay: 800.ms),
-              ],
-            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -645,40 +646,116 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  List<Widget> _buildQuickActions(BuildContext context) {
+    Widget action({
+      required VoidCallback onPressed,
+      required Widget icon,
+      required String tooltip,
+    }) {
+      return IconButton(
+        onPressed: onPressed,
+        icon: icon,
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        padding: const EdgeInsets.all(8),
+      );
+    }
+
+    return [
+      action(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AiBotScreen()),
+          );
+        },
+        icon: const Icon(Icons.smart_toy_outlined, color: Colors.tealAccent),
+        tooltip: 'AI Bot',
+      ),
+      action(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AdhkarScreen()),
+          );
+        },
+        icon: const Icon(Icons.menu_book_rounded, color: Colors.green),
+        tooltip: 'Adhkar',
+      ),
+      action(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AchievementsScreen()),
+          );
+        },
+        icon: const Icon(Icons.emoji_events, color: Colors.amber),
+        tooltip: 'Achievements',
+      ),
+      action(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const PrayerTimesScreen()),
+          );
+        },
+        icon: Icon(Icons.mosque, color: AppThemeColors.icon(context)),
+        tooltip: 'Prayer Times',
+      ),
+      action(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SettingsScreen()),
+          );
+        },
+        icon: const Icon(Icons.settings, color: Colors.grey),
+        tooltip: 'Settings',
+      ),
+    ];
+  }
+
   Widget _buildPrayerStatus(String name, bool isDone) {
-    return Column(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: isDone ? Colors.green[700] : Colors.grey[800],
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isDone ? Colors.green.shade400 : Colors.grey.shade600,
-              width: 1.5,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: isDone ? Colors.green[700] : Colors.grey[800],
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDone ? Colors.green.shade400 : Colors.grey.shade600,
+                width: 1.5,
+              ),
+            ),
+            child: Center(
+              child: Icon(
+                isDone ? Icons.check : Icons.access_time,
+                color: isDone ? Colors.white : AppThemeColors.textHint(context),
+                size: 14,
+              ),
             ),
           ),
-          child: Center(
-            child: Icon(
-              isDone ? Icons.check : Icons.access_time,
-              color: isDone ? Colors.white : AppThemeColors.textHint(context),
-              size: 14,
+          const SizedBox(height: 4),
+          Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: isDone
+                  ? Colors.green[700]
+                  : AppThemeColors.textHint(context),
+              fontSize: 10,
+              fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
             ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          name,
-          style: TextStyle(
-            color: isDone
-                ? Colors.green[700]
-                : AppThemeColors.textHint(context),
-            fontSize: 10,
-            fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

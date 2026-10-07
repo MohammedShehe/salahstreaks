@@ -610,6 +610,11 @@ class ReminderService {
   void showInAppReminder(BuildContext context, String title, String body) {
     if (!context.mounted) return;
 
+    final width = MediaQuery.sizeOf(context).width;
+    // Floating snackbars need horizontal room; on tiny web frames use fixed.
+    final useFloating = width >= 280;
+
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Column(
@@ -618,23 +623,32 @@ class ReminderService {
           children: [
             Text(
               title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
               ),
             ),
             const SizedBox(height: 4),
-            Text(body, style: const TextStyle(fontSize: 12)),
+            Text(
+              body,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
           ],
         ),
         backgroundColor: const Color(0xFF1A2F1A),
-        duration: const Duration(seconds: 15),
-        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        behavior: useFloating
+            ? SnackBarBehavior.floating
+            : SnackBarBehavior.fixed,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(useFloating ? 12 : 0),
           side: BorderSide(color: Colors.green[700]!.withOpacity(0.3)),
         ),
-        margin: const EdgeInsets.all(16),
+        margin: useFloating ? const EdgeInsets.all(16) : null,
         elevation: 6,
       ),
     );

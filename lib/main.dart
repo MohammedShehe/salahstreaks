@@ -13,18 +13,14 @@ import 'package:salahstreaks/services/storage_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // NOTE: no manual sqflite factory setup needed here — on Android/iOS
-  // sqflite initializes itself lazily on first openDatabase() call inside
-  // StorageService. If you ever need to run this on web/desktop, you'd
-  // initialize sqflite_common_ffi (or _ffi_web) here instead.
+  // Android/iOS: sqflite plugin provides the DB factory automatically.
+  // Web/desktop: native plugins (notifications, timezone channel, GPS) are
+  // limited — we soft-fail so the UI still loads for responsiveness testing.
 
-  // Local device notifications only — no backend/Firebase is required.
-  // Load the saved switches before scheduling so disabled reminders never get
-  // recreated during app startup.
   final reminderService = ReminderService();
-  await reminderService.initialize();
-  final savedSettings = await StorageService().loadSettings();
   try {
+    await reminderService.initialize();
+    final savedSettings = await StorageService().loadSettings();
     await reminderService.ensureInitialPermissionsAndSchedule(savedSettings);
   } catch (e) {
     debugPrint('Could not schedule local reminders: $e');
@@ -222,56 +218,66 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         physics: const BouncingScrollPhysics(),
         children: _screens,
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: AppThemeColors.bottomNavGradient(context),
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(
-                Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.08,
+      bottomNavigationBar: LayoutBuilder(
+        builder: (context, constraints) {
+          // Extremely narrow web frames (devtools device frames, etc.)
+          // cause 1px label overflows in BottomNavigationBar tiles.
+          final narrow = constraints.maxWidth < 280;
+          return Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: AppThemeColors.bottomNavGradient(context),
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(
+                    Theme.of(context).brightness == Brightness.dark
+                        ? 0.3
+                        : 0.08,
+                  ),
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: _onBottomNavTap,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          selectedItemColor: AppThemeColors.bottomNavSelected(context),
-          unselectedItemColor: AppThemeColors.bottomNavUnselected(context),
-          selectedLabelStyle: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
-          unselectedLabelStyle: TextStyle(
-            fontSize: 11,
-          ),
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded),
-              activeIcon: Icon(Icons.home_filled),
-              label: 'Home',
+            child: BottomNavigationBar(
+              currentIndex: _selectedIndex,
+              onTap: _onBottomNavTap,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              selectedItemColor: AppThemeColors.bottomNavSelected(context),
+              unselectedItemColor:
+                  AppThemeColors.bottomNavUnselected(context),
+              selectedFontSize: narrow ? 0 : 11,
+              unselectedFontSize: narrow ? 0 : 10,
+              iconSize: narrow ? 20 : 24,
+              showSelectedLabels: !narrow,
+              showUnselectedLabels: !narrow,
+              type: BottomNavigationBarType.fixed,
+              landscapeLayout:
+                  BottomNavigationBarLandscapeLayout.centered,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_rounded),
+                  activeIcon: Icon(Icons.home_filled),
+                  label: 'Home',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.bar_chart_rounded),
+                  activeIcon: Icon(Icons.bar_chart_outlined),
+                  label: 'Graphs',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.history_rounded),
+                  activeIcon: Icon(Icons.history_outlined),
+                  label: 'History',
+                ),
+              ],
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart_rounded),
-              activeIcon: Icon(Icons.bar_chart_outlined),
-              label: 'Graphs',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history_rounded),
-              activeIcon: Icon(Icons.history_outlined),
-              label: 'History',
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
