@@ -57,6 +57,9 @@ class AppProvider extends ChangeNotifier {
     super.dispose();
   }
 
+  /// Public reload used by pull-to-refresh on the home screen.
+  Future<void> refreshData() => _loadAllData();
+
   Future<void> _loadAllData() async {
     _isLoading = true;
     notifyListeners();

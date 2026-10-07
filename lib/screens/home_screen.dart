@@ -74,6 +74,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Pull-to-refresh: reload stored logs/streaks/settings and the daily verse.
+  Future<void> _onRefresh() async {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    await Future.wait([
+      provider.refreshData(),
+      _loadDailyVerse(),
+    ]);
+    if (mounted) setState(() {});
+  }
+
   void _copyVerse() {
     final text = '$_currentVerse\n\n$_currentTranslation';
     Clipboard.setData(ClipboardData(text: text));
@@ -114,11 +124,16 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: RefreshIndicator(
+            color: Colors.green,
+            backgroundColor: AppThemeColors.surface(context),
+            onRefresh: _onRefresh,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 // Profile and Quick Actions Row
                 Row(
                   children: [
@@ -622,6 +637,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ).animate().fadeIn(delay: 800.ms),
               ],
+            ),
             ),
           ),
         ),
