@@ -114,6 +114,32 @@ class DailyVerseService {
     );
   }
 
+  /// Loads the Swahili translation for a surah:ayah reference.
+  /// AlQuran.cloud provides the Swahili edition as sw.barwani.
+  Future<String> loadSwahiliTranslation(String reference) async {
+    final match = RegExp(r'(\d+)\s*:\s*(\d+)').firstMatch(reference);
+    if (match == null) {
+      throw const FormatException('Invalid Quran verse reference');
+    }
+    final verseReference = '${match.group(1)}:${match.group(2)}';
+    final uri = Uri.parse(
+      'https://api.alquran.cloud/v1/ayah/$verseReference/sw.barwani',
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw Exception('Swahili Quran API returned ${response.statusCode}');
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (body['code'] != 200 || body['data'] is! Map<String, dynamic>) {
+      throw Exception('Invalid Swahili Quran API response');
+    }
+    final text = (body['data'] as Map<String, dynamic>)['text'] as String?;
+    if (text == null || text.trim().isEmpty) {
+      throw Exception('Swahili translation unavailable');
+    }
+    return text;
+  }
+
   Future<Map<String, dynamic>> _getEdition(int globalAyah, String edition) async {
     final uri = Uri.parse(
       'https://api.alquran.cloud/v1/ayah/$globalAyah/$edition',

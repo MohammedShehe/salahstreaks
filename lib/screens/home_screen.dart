@@ -28,6 +28,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _currentVerse = '';
   String _currentTranslation = '';
+  String? _swahiliTranslation;
+  bool _showSwahili = false;
+  bool _isSwahiliLoading = false;
   String _currentTafsir = '';
   String _currentVerseReference = '';
   String _currentVerseSource = '';
@@ -74,6 +77,36 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _toggleSwahili() async {
+    if (_showSwahili) {
+      setState(() => _showSwahili = false);
+      return;
+    }
+    if ((_swahiliTranslation ?? '').trim().isNotEmpty) {
+      setState(() => _showSwahili = true);
+      return;
+    }
+    setState(() => _isSwahiliLoading = true);
+    try {
+      final translation = await DailyVerseService()
+          .loadSwahiliTranslation(_currentVerseReference);
+      if (!mounted) return;
+      setState(() {
+        _swahiliTranslation = translation;
+        _showSwahili = true;
+        _isSwahiliLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSwahiliLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not load the Swahili translation. Please check your internet connection.'),
+        ),
+      );
+    }
+  }
+
   /// Pull-to-refresh: reload stored logs/streaks/settings and the daily verse.
   Future<void> _onRefresh() async {
     final provider = Provider.of<AppProvider>(context, listen: false);
@@ -85,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _copyVerse() {
-    final text = '$_currentVerse\n\n$_currentTranslation';
+    final text = '$_currentVerse\n\n${_showSwahili ? (_swahiliTranslation ?? _currentTranslation) : _currentTranslation}';
     Clipboard.setData(ClipboardData(text: text));
     setState(() {
       _copied = true;
@@ -394,11 +427,34 @@ class _HomeScreenState extends State<HomeScreen> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            _currentTranslation,
+                            _showSwahili ? (_swahiliTranslation ?? _currentTranslation) : _currentTranslation,
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[300],
                               height: 1.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: _isSwahiliLoading ? null : _toggleSwahili,
+                            icon: _isSwahiliLoading
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.translate, size: 16),
+                            label: Text(_isSwahiliLoading
+                                ? 'Loading Swahili…'
+                                : (_showSwahili ? 'Show English' : 'SWAHILI')),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFC8E6C9),
+                              side: BorderSide(color: Colors.green.withOpacity(0.55)),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              visualDensity: VisualDensity.compact,
                             ),
                           ),
                         ),
