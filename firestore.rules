@@ -1,0 +1,145 @@
+rules_version = '2';
+
+// ============================================================================
+//  SalahStreaks – Ummah Leaderboard security rules
+//
+//  Publish these in Firebase console → Firestore Database → Rules
+//  (or `firebase deploy --only firestore:rules`).
+//
+//  Model
+//   * Every install signs in ANONYMOUSLY (Firebase Auth) and gets a random uid.
+//   * Everyone signed in may READ the public boards.
+//   * A user may only CREATE / UPDATE / DELETE documents whose id == their uid.
+//   * Every write is schema-checked (exact keys, types, ranges).
+//   * Score ceilings below mirror lib/services/leaderboard_scoring.dart, so a
+//     tampered client cannot publish a score that honest play could not reach.
+//   * Writes must be stamped with the server time and are limited to one per
+//     5 seconds per document (basic spam protection).
+//
+//  Honest limitation: with no backend, scores are computed on the device, so a
+//  determined cheater can still publish any value up to the ceilings. The rules
+//  cap the damage; they cannot prove the points were earned.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- helpers
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // 2..96 so multi-byte names (Arabic, emoji) pass; the app enforces 24 chars.
+    function validName(n) {
+      return n is string
+          && n.size() >= 2
+          && n.size() <= 96
+          && n.matches('^[^<>{}\\[\\]\\\\]+$');
+    }
+
+    function intBetween(v, lo, hi) {
+      return v is int && v >= lo && v <= hi;
+    }
+
+    function stampedNow() {
+      return request.resource.data.updatedAt == request.time;
+    }
+
+    // At most one write per 5 s per document.
+    function notTooSoon() {
+      return !('updatedAt' in resource.data)
+          || request.time > resource.data.updatedAt + duration.value(5, 's');
+    }
+
+    // ------------------------------------------------------- global profiles
+    match /profiles/{uid} {
+
+      function validProfile() {
+        let d = request.resource.data;
+        return d.keys().hasOnly([
+              'displayName', 'nameLower', 'avatar',
+              'totalPoints', 'totalStreak',
+              'salahStreak', 'sawmStreak', 'qiyyamStreak',
+              'quranStreak', 'sadaqatStreak', 'updatedAt'
+            ])
+            && d.keys().hasAll([
+              'displayName', 'nameLower', 'avatar',
+              'totalPoints', 'totalStreak',
+              'salahStreak', 'sawmStreak', 'qiyyamStreak',
+              'quranStreak', 'sadaqatStreak', 'updatedAt'
+            ])
+            && validName(d.displayName)
+            && d.nameLower is string
+            && d.nameLower.size() >= 2
+            && d.nameLower.size() <= 96
+            && intBetween(d.avatar, 0, 11)
+            && intBetween(d.totalPoints, 0, 1000000)
+            && intBetween(d.totalStreak, 0, 25000)
+            && intBetween(d.salahStreak, 0, 5000)
+            && intBetween(d.sawmStreak, 0, 5000)
+            && intBetween(d.qiyyamStreak, 0, 5000)
+            && intBetween(d.quranStreak, 0, 5000)
+            && intBetween(d.sadaqatStreak, 0, 5000)
+            && d.updatedAt is timestamp
+            && stampedNow();
+      }
+
+      allow get, list: if signedIn();
+      allow create: if isOwner(uid) && validProfile();
+      allow update: if isOwner(uid) && validProfile() && notTooSoon();
+      allow delete: if isOwner(uid);
+    }
+
+    // ------------------------------------------- weekly / monthly leaderboards
+    //   periods/w2026-47/entries/{uid}   (ISO week, Monday start)
+    //   periods/m2026-11/entries/{uid}   (calendar month)
+    match /periods/{periodId}/entries/{uid} {
+
+      // Format + only the previous / current / next year (covers ISO-week
+      // year boundaries and client/server clock differences).
+      function validPeriodId() {
+        return periodId.matches('^[wm](' + string(request.time.year() - 1) + '|'
+                                          + string(request.time.year()) + '|'
+                                          + string(request.time.year() + 1)
+                                          + ')-[0-9]{2}$');
+      }
+
+      function isWeekly() {
+        return periodId.matches('^w.*');
+      }
+
+      function validEntry() {
+        let d = request.resource.data;
+        return validPeriodId()
+            && d.keys().hasOnly([
+              'displayName', 'avatar', 'points', 'activeDays', 'streak', 'updatedAt'
+            ])
+            && d.keys().hasAll([
+              'displayName', 'avatar', 'points', 'activeDays', 'streak', 'updatedAt'
+            ])
+            && validName(d.displayName)
+            && intBetween(d.avatar, 0, 11)
+            // 750 pts/day max: 5 250 per week, 23 250 per month
+            && intBetween(d.points, 0, isWeekly() ? 5250 : 23250)
+            && intBetween(d.activeDays, 0, isWeekly() ? 7 : 31)
+            && intBetween(d.streak, 0, 25000)
+            && d.updatedAt is timestamp
+            && stampedNow();
+      }
+
+      allow get, list: if signedIn() && validPeriodId();
+      allow create: if isOwner(uid) && validEntry();
+      allow update: if isOwner(uid) && validEntry() && notTooSoon();
+      allow delete: if isOwner(uid);
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -529,7 +529,14 @@ class StorageService {
 
   Future<void> clearAllData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    // Keep the Ummah Leaderboard identity/session (keys prefixed `lb_`),
+    // otherwise clearing app data would orphan the published profile with no
+    // way to delete it. Users can leave the leaderboard from its own screen.
+    for (final key in prefs.getKeys().toList()) {
+      if (!key.startsWith('lb_')) {
+        await prefs.remove(key);
+      }
+    }
     _usePrefsForLogs = null;
     if (!kIsWeb) {
       try {

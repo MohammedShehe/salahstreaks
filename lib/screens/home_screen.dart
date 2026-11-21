@@ -16,6 +16,7 @@ import 'package:salahstreaks/screens/achievements_screen.dart';
 import 'package:salahstreaks/screens/prayer_times_screen.dart';
 import 'package:salahstreaks/screens/settings_screen.dart';
 import 'package:salahstreaks/screens/ai_bot_screen.dart';
+import 'package:salahstreaks/screens/leaderboard_screen.dart';
 import 'package:salahstreaks/services/daily_verse_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -719,6 +720,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return [
+      action(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const LeaderboardScreen()),
+          );
+        },
+        icon: const Icon(Icons.public, color: Colors.lightBlueAccent),
+        tooltip: 'Ummah Leaderboard',
+      ),
       action(
         onPressed: () {
           Navigator.push(

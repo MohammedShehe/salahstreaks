@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:salahstreaks/utils/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'package:salahstreaks/providers/app_provider.dart';
+import 'package:salahstreaks/providers/leaderboard_provider.dart';
 import 'package:salahstreaks/screens/splash_screen.dart';
 import 'package:salahstreaks/screens/home_screen.dart';
 import 'package:salahstreaks/screens/graphs_screen.dart';
@@ -27,8 +28,16 @@ void main() async {
   }
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AppProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppProvider()),
+        // Ummah Leaderboard (serverless, opt-in). It only READS AppProvider
+        // and never changes local data; attach() is re-run on every change.
+        ChangeNotifierProxyProvider<AppProvider, LeaderboardProvider>(
+          create: (_) => LeaderboardProvider(),
+          update: (_, app, lb) => (lb ?? LeaderboardProvider())..attach(app),
+        ),
+      ],
       child: SalahStreaksApp(reminderService: reminderService),
     ),
   );
